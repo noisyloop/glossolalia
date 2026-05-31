@@ -1,0 +1,20 @@
+~ waveforms — harmonic constructions over a fundamental
+~ invoke "waveforms" to bring these incantations into your scroll.
+
+~ a sweep upward across an octave in eight steps
+incant sweep takes f
+  let step be f
+  repeat 8
+    burn step for 0.15
+    scale step by 1.0905
+    drift 0.05
+    breathe
+  end
+end
+
+~ stack a tone with its third and fifth — a sounded triad
+incant triad takes f
+  burn f
+  burn f scale by 1.25
+  burn f scale by 1.5
+end

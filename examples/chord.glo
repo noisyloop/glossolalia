@@ -1,0 +1,15 @@
+~ a rising fifth, spoken three times
+let root be 432
+
+incant fifth takes f
+  burn f
+  burn f scale by 1.5
+end
+
+repeat 3
+  call fifth with root
+  rise root by 12
+  drift 0.5
+end
+
+speak "the chord has been spoken"

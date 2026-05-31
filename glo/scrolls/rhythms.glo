@@ -1,0 +1,20 @@
+~ rhythms — scrolls of time and repetition
+~ invoke "rhythms" to bring these incantations into your scroll.
+
+~ a steady pulse: burn a tone n times, each held for one beat
+incant pulse takes f, n
+  repeat n
+    burn f for 0.25
+    drift 0.25
+    breathe
+  end
+end
+
+~ a heartbeat: two quick tones, then rest
+incant heartbeat takes f
+  burn f for 0.1
+  drift 0.1
+  burn f for 0.1
+  drift 0.5
+  breathe
+end

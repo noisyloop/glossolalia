@@ -1,0 +1,14 @@
+~ invoke a scroll of tunings, then count down through control flow
+invoke "tunings"
+
+speak "the sacred tones"
+call solfeggio with 1
+call solfeggio with 2
+call solfeggio with 3
+
+let vol be 3
+until vol is 0
+  speak "fading"
+  fall vol
+end
+speak "silence"

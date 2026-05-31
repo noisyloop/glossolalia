@@ -1,0 +1,21 @@
+~ two voices, an octave apart, breathing together
+let base be 432
+
+voice low
+  repeat 8
+    burn base
+    drift 2
+    breathe
+  end
+end
+
+voice high
+  repeat 8
+    burn base scale by 1.5
+    drift 2
+    breathe
+  end
+end
+
+sync voices
+silence
