@@ -433,4 +433,62 @@ listening and never surface a Python traceback in normal use.
 **Reserved for future phases:** `weft` `loom` `bind` `sever` `mirror` `invert`
 `seed` `bloom` `wither` `tide` `eddy`
 
+## 10. The congregation — a shared, multiplayer REPL
+
+A **congregation** is a live session in which many terminals share one
+interpreter over WebSockets. It is an extension of the runtime, not of the
+grammar: no new keywords are introduced.
+
+```
+glo serve [--host localhost] [--port 7432]    raise a congregation
+glo join  <host> [--port 7432]                add your voice
+```
+
+### 10.1 Voices
+
+Each connecting terminal is assigned a **voice** name from the choir —
+`low`, `mid`, `high`, `root`, `fifth`, `ghost` — and a distinct colour.
+Beyond six voices the choir doubles up (`low-7`, `mid-8`, …). Names are
+returned to the pool when a voice departs.
+
+### 10.2 Shared and local state
+
+| State            | Scope                                                     |
+|------------------|-----------------------------------------------------------|
+| `remember`       | shared — the congregation's memory, broadcast as JSON     |
+| `sigil`          | shared and immutable once carved by any voice             |
+| `let` / `set`    | local — bound in the speaking voice's own frame           |
+
+Every utterance is executed against the single shared interpreter. After
+each one the server broadcasts the utterance (with its voice), anything
+spoken, any tone burned (as the visible-tone waveform), and the current
+shared memory.
+
+### 10.3 Ordering and sync
+
+Concurrent utterances are queued server-side and executed FIFO — there is
+no merging and no collision (dissonance is left to a future phase).
+
+`sync voices` blocks the speaking voice until every other currently
+connected voice has sent a `breathe` signal — a barrier keyed to the voice
+count at the moment of the sync. If a voice goes silent mid-sync, the
+barrier releases and the machine announces *the voice of {name} has gone
+silent*.
+
+### 10.4 Resilience
+
+If the shared evaluator raises, the failure is spoken back in Glossolalia's
+own error idiom and broadcast to every voice; the congregation does not
+crash. There is no web UI and no authentication — a congregation is a
+trusted gathering on a network you control.
+
+### 10.5 Client commands
+
+| Command   | Effect                              |
+|-----------|-------------------------------------|
+| `\who`    | list the voices currently gathered  |
+| `\part`   | leave the congregation gracefully   |
+
+---
+
 > *glossolalia — the machine listens.*

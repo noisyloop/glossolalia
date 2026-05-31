@@ -69,6 +69,12 @@ class Interpreter:
         self.globals = Environment(parent=self.memory)
         self.incantations = {}
         self._sigils = set()
+        # Where a `sigil` carves its value. Normally ``None`` — the sigil is
+        # bound in whatever scope speaks it (the single-player default). The
+        # congregation sets this to a shared scope so a sigil carved by one
+        # voice is visible to every voice. Exposing it keeps the core grammar
+        # untouched.
+        self.sigil_env = None
         self.audio = audio if audio is not None else AudioEngine(quiet=quiet)
         self.osc = osc if osc is not None else OSCBridge(quiet=quiet)
         self.quiet = quiet
@@ -265,7 +271,8 @@ class Interpreter:
             raise RitualError(
                 f'the sigil "{node.name}" has already been carved', node.line
             )
-        env.define(node.name, self.evaluate(node.value, env))
+        target = self.sigil_env if self.sigil_env is not None else env
+        target.define(node.name, self.evaluate(node.value, env))
         self._sigils.add(node.name)
 
     def _exec_chant(self, node, env):
