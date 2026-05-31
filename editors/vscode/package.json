@@ -1,0 +1,32 @@
+{
+  "name": "glossolalia",
+  "displayName": "Glossolalia",
+  "description": "Syntax highlighting for the Glossolalia language (.glo) — utterance is execution.",
+  "version": "0.1.0",
+  "publisher": "noisyloop",
+  "license": "MIT",
+  "engines": { "vscode": "^1.60.0" },
+  "categories": ["Programming Languages"],
+  "keywords": ["glossolalia", "glo", "livecoding", "audio", "esolang"],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/noisyloop/glossolalia"
+  },
+  "contributes": {
+    "languages": [
+      {
+        "id": "glossolalia",
+        "aliases": ["Glossolalia", "glo"],
+        "extensions": [".glo"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "glossolalia",
+        "scopeName": "source.glo",
+        "path": "./syntaxes/glossolalia.tmLanguage.json"
+      }
+    ]
+  }
+}
