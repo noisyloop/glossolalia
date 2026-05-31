@@ -61,6 +61,7 @@ underscore. A word is either a **keyword** (part of the tongue) or a **name**
 | `glyph`   | `str`        | text                             |
 | `flicker` | `bool`       | truth — `true` / `false`         |
 | `void`    | `None`       | nothing                          |
+| `strand`  | `list`       | an ordered collection (see §3.2) |
 
 The type names double as **conversion operators** in expressions:
 
@@ -89,8 +90,9 @@ Operators are words. Precedence, lowest to highest:
 | 3    | `is` `not` `above` `below`      | `==` `!=` `>` `<`             |
 | 4    | `add by` `subtract by`          | `+` `-`                       |
 | 5    | `scale by` `modulate by`        | `*` `%`                       |
-| 6    | `not` (prefix), type casts      | logical negation, conversion  |
-| 7    | literals, names, `call`, `( )`  | primaries                     |
+| 6    | `not`, type casts, `count`, `ascend`, `descend`, `unweave`, `fracture … by`, `converge … by` | prefix operators |
+| 7    | `at`                            | postfix indexing              |
+| 8    | literals, names, `call`, `weave`, `( )` | primaries             |
 
 The arithmetic operators are **postfix word operators**: the operand comes
 first.
@@ -105,6 +107,56 @@ speak phase modulate by 0.333   ~ phase wrapped into [0, 0.333)
 
 `is` compares any two values for equality; `not` as a binary operator means
 *is not*. `above` / `below` compare tones and pulses by magnitude.
+
+### 3.1 Tone-craft
+
+`ascend <expr>` raises a tone by an octave (×2); `descend <expr>` lowers it by
+an octave (÷2).
+
+```
+burn ascend 432      ~ 864
+burn descend 432     ~ 216.0
+```
+
+### 3.2 Strands
+
+A **strand** is an ordered collection, woven from values:
+
+```
+let intervals be weave 1, 1.25, 1.5, 2
+let empty be weave
+```
+
+| Form                     | Meaning                                          |
+|--------------------------|--------------------------------------------------|
+| `weave a, b, c`          | build a strand                                   |
+| `count <strand-or-glyph>`| how many elements / characters                   |
+| `<strand-or-glyph> at <n>` | the element / character at index `n` (0-based) |
+| `unweave <strand-or-glyph>`| a reversed copy                                |
+
+```
+let notes be weave 432, 528, 639
+speak count notes        ~ 3
+speak notes at 1         ~ 528
+speak unweave notes      ~ weave 639, 528, 432
+```
+
+`at` binds to a single value, so to index a strand **literal** use a name or
+parentheses: `(weave 5, 6, 7) at 2`. `weave` itself consumes the comma list
+greedily — wrap a strand in `( )` when passing it among other comma-separated
+arguments.
+
+A strand speaks back as the `weave` that would rebuild it.
+
+### 3.3 Glyph-craft
+
+`fracture <glyph> by <separator>` splits a glyph into a strand;
+`converge <strand> by <separator>` joins a strand into a glyph.
+
+```
+let words be fracture "as above so below" by " "   ~ weave "as","above",...
+speak converge words by "-"                         ~ as-above-so-below
+```
 
 ---
 
@@ -168,6 +220,60 @@ end
 
 `else` is optional. `repeat <n>` runs its body `n` times (`n` is rounded to a
 whole pulse). `until <cond>` repeats its body until the condition becomes true.
+
+`repeat <name> in <strand-or-glyph>` walks a collection, binding each element
+to `name` in turn:
+
+```
+repeat note in weave 432, 528, 639
+  burn note
+end
+```
+
+### 4.4a Sigils — unchangeable bindings
+
+```
+sigil root be 432       ~ carve a constant
+set root to 528         ~ error: the sigil "root" is fixed and cannot be changed
+```
+
+A sigil may not be re-carved, `set`, `rise`/`fall`, or otherwise mutated.
+
+### 4.4b Memory — remember & forget
+
+The **memory** is a layer beneath the global scope. A value placed there with
+`remember` is reachable from any scope — including inside incantations — and is
+not shadowed by local bindings.
+
+```
+remember tonic as 432
+incant recall
+  speak tonic        ~ 432, even with no parameter
+end
+forget tonic         ~ remove it; reading it afterwards is an error
+```
+
+### 4.4c Rituals — scoped blocks
+
+`ritual … end` runs a block in its own child scope. Names `let` inside a ritual
+do not escape it.
+
+```
+let x be 1
+ritual
+  let x be 99
+  speak x            ~ 99
+end
+speak x              ~ 1
+```
+
+### 4.4d Chant
+
+`chant <count> <expr>` speaks a value a number of times — a one-line litany.
+
+```
+chant 3 "om"         ~ om / om / om
+```
 
 ### 4.5 Incantations (functions)
 
@@ -306,19 +412,25 @@ listening and never surface a Python traceback in normal use.
 **Commands:** `speak` `hush` `burn` `rise` `fall` `drift` `breathe` `silence`
 `open` `close` `send` `sync` `void`
 
-**Structure:** `let` `be` `set` `to` `by` `with` `takes` `for` `add`
+**Structure:** `let` `be` `set` `to` `by` `with` `takes` `for` `as` `add`
 `subtract` `scale` `modulate`
 
-**Blocks:** `if` `else` `repeat` `until` `incant` `voice` `invoke` `call`
-`end` `echo`
+**Blocks:** `if` `else` `repeat` `in` `until` `incant` `voice` `invoke` `call`
+`end` `echo` `ritual`
 
 **Comparison / logic:** `is` `not` `above` `below` `and` `or`
 
 **Type names:** `tone` `pulse` `glyph` `flicker`
 
-**Contextual:** `channel` `voices`
+**Strands & craft:** `weave` `unweave` `count` `at` `fracture` `converge`
 
-**Reserved for future phases:** `weave` `unweave` `chant` `remember` `forget`
-`ritual` `sigil` `ascend` `descend` `fracture` `converge`
+**Memory & constants:** `remember` `forget` `sigil`
+
+**Tone-craft & utterance:** `ascend` `descend` `chant`
+
+**Audio / signal:** `open` `close` `channel` `send` `silence` `sync` `voices`
+
+**Reserved for future phases:** `weft` `loom` `bind` `sever` `mirror` `invert`
+`seed` `bloom` `wither` `tide` `eddy`
 
 > *glossolalia — the machine listens.*

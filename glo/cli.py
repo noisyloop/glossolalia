@@ -104,7 +104,7 @@ def cmd_repl(args):
     print("  (an empty line, or \"end\", closes a block; ctrl-d departs)\n")
     buffer = []
     depth = 0
-    _openers = {"if", "repeat", "until", "incant", "voice"}
+    _openers = {"if", "repeat", "until", "incant", "voice", "ritual"}
     while True:
         prompt = "... " if buffer else ">>> "
         try:
