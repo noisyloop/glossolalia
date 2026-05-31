@@ -52,8 +52,7 @@ class CapturingAudio(AudioEngine):
         except (TypeError, ValueError):
             freq = 0.0
         duration = self.DEFAULT_DURATION if duration is None else float(duration)
-        bar = self._tone_glyph(freq)
-        self.events.append(f"~ {freq:>8.2f}hz  {bar}  ({duration:.2f}s) ~")
+        self.events.append(self.tone_line(freq, duration))
 
     def silence(self):  # nothing is really sounding
         pass
@@ -110,6 +109,7 @@ class Congregation:
 
         self.queue = asyncio.Queue()   # (Voice, source) awaiting execution
         self._consumer = None
+        self._last_memory = {}    # last broadcast shared memory, to skip no-ops
 
         # sync voices: a barrier keyed to the voice count when sync began.
         self.barrier = None
@@ -219,11 +219,19 @@ class Congregation:
         if not source:
             return
 
+        # The bare signal: drop a trailing `~` comment and collapse runs of
+        # whitespace. Used only to spot a ritual signal — the original
+        # `source` is what gets executed.
+        signal = " ".join(source.split("~", 1)[0].split())
+
         # `sync voices` and `breathe` are the congregation's two ritual
         # signals; everything else is an utterance to be executed in order.
-        if source in ("sync voices", "sync"):
+        # Recognise the signal regardless of stray whitespace or a trailing
+        # `~` comment, so `sync  voices` or `breathe ~ now` still register
+        # rather than slipping through to be run as interpreter no-ops.
+        if signal in ("sync voices", "sync"):
             await self._sync(voice)
-        elif source == "breathe":
+        elif signal == "breathe":
             await self._breathe(voice)
         else:
             await self.queue.put((voice, source))
@@ -271,8 +279,12 @@ class Congregation:
                 "type": "error", "voice": voice.name,
                 "text": f"the machine stopped: {error}",
             })
-        # the shared memory is the congregation's truth — publish it
-        await self.broadcast({"type": "memory", "memory": self._memory()})
+        # the shared memory is the congregation's truth — publish it, but
+        # only when an utterance actually changed it.
+        memory = self._memory()
+        if memory != self._last_memory:
+            self._last_memory = memory
+            await self.broadcast({"type": "memory", "memory": memory})
 
     # ── sync voices / breathe ─────────────────────────────────────────
     async def _sync(self, voice):

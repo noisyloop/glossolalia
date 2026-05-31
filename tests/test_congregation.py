@@ -119,8 +119,10 @@ def test_local_let_does_not_leak_between_voices():
         b = await _join(port)
         await _recv_until(b, "welcome")
 
+        # `let` touches no shared memory, so wait on the utterance echo
+        # (broadcast as the consumer begins running it) to order A before B.
         await _say(a, "let secret be 99")
-        await _recv_until(a, "memory")            # A's utterance has run
+        await _recv_until(a, "utter")
 
         await _say(b, "speak secret")
         err = await _recv_until(b, "error")
@@ -200,6 +202,63 @@ def test_evaluator_error_does_not_crash_the_server():
         await _say(ws, "speak 7")
         out = await _recv_until(ws, "output")
         assert out["text"].strip() == "7"
+
+        await ws.close()
+
+    _run(scenario)
+
+
+def test_ritual_signals_survive_whitespace_and_comments():
+    """`sync  voices` and `breathe ~ note` still register as ritual signals."""
+
+    async def scenario(cong, port):
+        a = await _join(port)
+        await _recv_until(a, "welcome")
+        b = await _join(port)
+        await _recv_until(b, "welcome")
+        await _recv_until(a, "joined")
+
+        # Extra spacing must not stop the sync from registering.
+        await _say(a, "sync   voices")
+        await _recv_until(a, "sync")
+        with pytest.raises(asyncio.TimeoutError):
+            await _recv_until(a, "synced", timeout=0.4)
+
+        # A trailing comment must not stop the breath from registering.
+        await _say(b, "breathe   ~ here i am")
+        synced = await _recv_until(a, "synced", timeout=2.0)
+        assert synced["voice"] == "low"
+
+        await a.close()
+        await b.close()
+
+    _run(scenario)
+
+
+def test_unchanged_memory_is_not_rebroadcast():
+    """Memory is published only when an utterance actually changes it."""
+
+    async def scenario(cong, port):
+        ws = await _join(port)
+        await _recv_until(ws, "welcome")
+
+        # A remember changes memory: it is broadcast.
+        await _say(ws, "remember x as 1")
+        mem = await _recv_until(ws, "memory")
+        assert mem["memory"]["x"] == 1
+
+        # A pure speak changes nothing: no memory message before its output.
+        await _say(ws, "speak x")
+        saw_memory = False
+        while True:
+            raw = await asyncio.wait_for(ws.recv(), 2.0)
+            msg = json.loads(raw)
+            if msg.get("type") == "memory":
+                saw_memory = True
+            if msg.get("type") == "output":
+                break
+        assert msg["text"].strip() == "1"
+        assert not saw_memory
 
         await ws.close()
 
