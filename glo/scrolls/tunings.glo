@@ -1,0 +1,42 @@
+~ tunings — a scroll of resonant frequencies
+~ invoke "tunings" to bring these incantations into your scroll.
+
+~ the anchor of 432hz tuning
+let earth be 432
+
+~ burn one of the six classic solfeggio tones by index (1..6)
+incant solfeggio takes n
+  if n is 1
+    burn 396
+  end
+  if n is 2
+    burn 417
+  end
+  if n is 3
+    burn 528
+  end
+  if n is 4
+    burn 639
+  end
+  if n is 5
+    burn 741
+  end
+  if n is 6
+    burn 852
+  end
+end
+
+~ a just-intonation perfect fifth above a tone
+incant fifth takes f
+  echo f scale by 1.5
+end
+
+~ a just-intonation major third above a tone
+incant third takes f
+  echo f scale by 1.25
+end
+
+~ an octave above a tone
+incant octave takes f
+  echo f scale by 2
+end
