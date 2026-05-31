@@ -45,6 +45,13 @@ class CallExpr:
     line: int = 0
 
 
+@dataclass
+class StrandLiteral:
+    """weave a, b, c — a strand (ordered collection)."""
+    elements: List[Any] = field(default_factory=list)
+    line: int = 0
+
+
 # ── Statements ───────────────────────────────────────────────────────
 
 @dataclass
@@ -125,6 +132,52 @@ class If:
 class Repeat:
     count: Any
     body: List[Any] = field(default_factory=list)
+    line: int = 0
+
+
+@dataclass
+class ForEach:
+    """repeat <name> in <strand> — walk a strand or glyph."""
+    name: str
+    iterable: Any = None
+    body: List[Any] = field(default_factory=list)
+    line: int = 0
+
+
+@dataclass
+class Ritual:
+    """ritual ... end — a block with its own scope."""
+    body: List[Any] = field(default_factory=list)
+    line: int = 0
+
+
+@dataclass
+class Remember:
+    """remember <name> as <expr> — write to the deep memory layer."""
+    name: str
+    value: Any = None
+    line: int = 0
+
+
+@dataclass
+class Forget:
+    name: str
+    line: int = 0
+
+
+@dataclass
+class Sigil:
+    """sigil <name> be <expr> — an unchangeable binding."""
+    name: str
+    value: Any = None
+    line: int = 0
+
+
+@dataclass
+class Chant:
+    """chant <count> <expr> — speak a value a number of times."""
+    count: Any
+    value: Any
     line: int = 0
 
 

@@ -42,6 +42,9 @@ def to_glyph(value):
     if isinstance(value, float):
         # 432.0 stays 432.0 (a tone), but 0.5 stays 0.5
         return repr(value)
+    if isinstance(value, list):
+        # a strand reads back as the weave that would make it
+        return "weave " + ", ".join(to_glyph(v) for v in value)
     return str(value)
 
 
@@ -60,8 +63,12 @@ def is_truthy(value):
 class Interpreter:
     def __init__(self, audio=None, osc=None, quiet=False, time_scale=None,
                  trace=False):
-        self.globals = Environment()
+        # The deep memory layer sits beneath globals: things the machine
+        # is told to `remember` persist here, reachable from any scope.
+        self.memory = Environment()
+        self.globals = Environment(parent=self.memory)
         self.incantations = {}
+        self._sigils = set()
         self.audio = audio if audio is not None else AudioEngine(quiet=quiet)
         self.osc = osc if osc is not None else OSCBridge(quiet=quiet)
         self.quiet = quiet
@@ -141,6 +148,7 @@ class Interpreter:
             time.sleep(seconds)
 
     def _exec_step(self, node, env):
+        self._guard_mutable(node.name, node.line)
         current = env.get(node.name, node.line)
         amount = 1
         if node.amount is not None:
@@ -148,6 +156,7 @@ class Interpreter:
         env.assign(node.name, current + node.direction * amount, node.line)
 
     def _exec_mutate(self, node, env):
+        self._guard_mutable(node.name, node.line)
         current = env.get(node.name, node.line)
         amount = self.evaluate(node.amount, env)
         if node.op == "add":
@@ -162,10 +171,18 @@ class Interpreter:
             raise RitualError(f"unknown change {node.op}", node.line)
         env.assign(node.name, result, node.line)
 
+    def _guard_mutable(self, name, line):
+        if name in self._sigils:
+            raise RitualError(
+                f'the sigil "{name}" is fixed and cannot be changed', line
+            )
+
     def _exec_let(self, node, env):
+        self._guard_mutable(node.name, node.line)
         env.define(node.name, self.evaluate(node.value, env))
 
     def _exec_set(self, node, env):
+        self._guard_mutable(node.name, node.line)
         env.assign(node.name, self.evaluate(node.value, env), node.line)
 
     def _exec_if(self, node, env):
@@ -202,6 +219,70 @@ class Interpreter:
                     "it may never come to rest",
                     node.line,
                 )
+
+    def _exec_foreach(self, node, env):
+        iterable = self.evaluate(node.iterable, env)
+        if isinstance(iterable, str):
+            items = list(iterable)
+        elif isinstance(iterable, list):
+            items = iterable
+        else:
+            raise RitualError(
+                "only a strand or a glyph can be walked with repeat ... in",
+                node.line,
+            )
+        cap = limits.MAX_ITERATIONS
+        for index, item in enumerate(items):
+            if cap and index >= cap:
+                raise RitualError(
+                    "the walk ran longer than the machine allows", node.line
+                )
+            env.define(node.name, item)
+            self.execute_block(node.body, env)
+
+    def _exec_ritual(self, node, env):
+        # a block with its own scope, performed once
+        inner = Environment(parent=env)
+        self.execute_block(node.body, inner)
+
+    def _exec_remember(self, node, env):
+        self._guard_mutable(node.name, node.line)
+        # write straight to the deep memory layer, reachable from anywhere
+        self.memory.define(node.name, self.evaluate(node.value, env))
+
+    def _exec_forget(self, node, env):
+        self._guard_mutable(node.name, node.line)
+        if node.name in self.memory.vars:
+            del self.memory.vars[node.name]
+        else:
+            raise RitualError(
+                f'the machine has nothing named "{node.name}" to forget',
+                node.line,
+            )
+
+    def _exec_sigil(self, node, env):
+        if node.name in self._sigils:
+            raise RitualError(
+                f'the sigil "{node.name}" has already been carved', node.line
+            )
+        env.define(node.name, self.evaluate(node.value, env))
+        self._sigils.add(node.name)
+
+    def _exec_chant(self, node, env):
+        count = self.evaluate(node.count, env)
+        try:
+            count = int(count)
+        except (TypeError, ValueError):
+            raise RitualError("chant needs a count of how many times", node.line)
+        if limits.MAX_ITERATIONS and count > limits.MAX_ITERATIONS:
+            raise RitualError(
+                "chant was asked to sound more times than the machine allows",
+                node.line,
+            )
+        value = self.evaluate(node.value, env)
+        spoken = to_glyph(value)
+        for _ in range(max(0, count)):
+            print(spoken, file=sys.stdout)
 
     def _exec_incant(self, node, env):
         self.incantations[node.name] = Closure(node)
@@ -344,6 +425,9 @@ class Interpreter:
     def _eval_call(self, node, env):
         return self.invoke_incant(node.name, node.args, env, node.line)
 
+    def _eval_strand(self, node, env):
+        return [self.evaluate(e, env) for e in node.elements]
+
     def _eval_unary(self, node, env):
         value = self.evaluate(node.operand, env)
         op = node.op
@@ -357,6 +441,24 @@ class Interpreter:
             return to_glyph(value)
         if op == "flicker":
             return is_truthy(value)
+        if op == "ascend":           # an octave up
+            return self._numeric(value, node.line) * 2
+        if op == "descend":          # an octave down
+            return self._numeric(value, node.line) / 2.0
+        if op == "count":            # length of a strand or glyph
+            if isinstance(value, (list, str)):
+                return len(value)
+            raise RitualError(
+                "only a strand or a glyph can be counted", node.line
+            )
+        if op == "unweave":          # the strand (or glyph) reversed
+            if isinstance(value, list):
+                return list(reversed(value))
+            if isinstance(value, str):
+                return value[::-1]
+            raise RitualError(
+                "only a strand or a glyph can be unwoven", node.line
+            )
         raise RitualError(f"unknown sign {op}", node.line)  # pragma: no cover
 
     def _eval_binary(self, node, env):
@@ -394,6 +496,12 @@ class Interpreter:
             return left * right
         if op == "modulate":
             return self._modulo(left, right, node.line)
+        if op == "at":
+            return self._index(left, right, node.line)
+        if op == "fracture":
+            return self._fracture(left, right, node.line)
+        if op == "converge":
+            return self._converge(left, right, node.line)
         raise RitualError(f"unknown sign {op}", node.line)  # pragma: no cover
 
     # ── helpers ──────────────────────────────────────────────────
@@ -402,6 +510,35 @@ class Interpreter:
             return left % right
         except ZeroDivisionError:
             raise RitualError("the machine cannot modulate by nothing", line)
+
+    def _index(self, target, index, line):
+        if not isinstance(target, (list, str)):
+            raise RitualError(
+                "only a strand or a glyph can be reached into with at", line
+            )
+        if not isinstance(index, int) or isinstance(index, bool):
+            raise RitualError("a strand is reached by a pulse (whole number)", line)
+        try:
+            return target[index]
+        except IndexError:
+            raise RitualError(
+                f"there is nothing at {index} — the strand is not that long",
+                line,
+            )
+
+    def _fracture(self, value, separator, line):
+        if not isinstance(value, str):
+            raise RitualError("only a glyph can be fractured", line)
+        sep = to_glyph(separator)
+        if sep == "":
+            return list(value)
+        return value.split(sep)
+
+    def _converge(self, value, separator, line):
+        if not isinstance(value, list):
+            raise RitualError("only a strand can be converged", line)
+        sep = to_glyph(separator)
+        return sep.join(to_glyph(v) for v in value)
 
     @staticmethod
     def _numeric(value, line):
@@ -457,7 +594,13 @@ _EXEC_DISPATCH = {
     ast.Set: Interpreter._exec_set,
     ast.If: Interpreter._exec_if,
     ast.Repeat: Interpreter._exec_repeat,
+    ast.ForEach: Interpreter._exec_foreach,
     ast.Until: Interpreter._exec_until,
+    ast.Ritual: Interpreter._exec_ritual,
+    ast.Remember: Interpreter._exec_remember,
+    ast.Forget: Interpreter._exec_forget,
+    ast.Sigil: Interpreter._exec_sigil,
+    ast.Chant: Interpreter._exec_chant,
     ast.Incant: Interpreter._exec_incant,
     ast.CallStmt: Interpreter._exec_call_stmt,
     ast.Echo: Interpreter._exec_echo,
@@ -475,6 +618,7 @@ _EVAL_DISPATCH = {
     ast.Literal: Interpreter._eval_literal,
     ast.Name: Interpreter._eval_name,
     ast.CallExpr: Interpreter._eval_call,
+    ast.StrandLiteral: Interpreter._eval_strand,
     ast.Unary: Interpreter._eval_unary,
     ast.Binary: Interpreter._eval_binary,
 }

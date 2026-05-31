@@ -29,6 +29,15 @@ _COMPARE_OPS = {"is", "not", "above", "below"}
 _ADDITIVE_OPS = {"add", "subtract"}
 _MULTIPLICATIVE_OPS = {"scale", "modulate"}
 _CAST_OPS = {"tone", "pulse", "glyph", "flicker"}
+# prefix word-operators that take a single operand
+_PREFIX_OPS = {"count", "ascend", "descend", "unweave"}
+# tokens that can begin an expression (used to detect an empty `weave`)
+_EXPR_STARTERS = (
+    {"NUMBER", "STRING", "NAME", "void", "call", "LPAREN", "not",
+     "weave", "unweave", "count", "ascend", "descend", "fracture",
+     "converge"}
+    | _CAST_OPS
+)
 
 
 class Parser:
@@ -226,11 +235,57 @@ class Parser:
 
     def _repeat(self):
         line = self.advance().line
+        # foreach form:  repeat <name> in <strand>
+        if self.check("NAME") and self.peek().type == "in":
+            name = self.advance().value
+            self.advance()  # consume "in"
+            iterable = self.expression()
+            self.end_statement()
+            body, _ = self.parse_block(("end",))
+            self.end_statement()
+            return ast.ForEach(name, iterable, body, line)
+        # counted form:  repeat <n>
         count = self.expression()
         self.end_statement()
         body, _ = self.parse_block(("end",))
         self.end_statement()
         return ast.Repeat(count, body, line)
+
+    def _ritual(self):
+        line = self.advance().line
+        self.end_statement()
+        body, _ = self.parse_block(("end",))
+        self.end_statement()
+        return ast.Ritual(body, line)
+
+    def _remember(self):
+        line = self.advance().line
+        name = self.expect("NAME", "a name to remember").value
+        self.expect("as", '"as" and a value')
+        value = self.expression()
+        self.end_statement()
+        return ast.Remember(name, value, line)
+
+    def _forget(self):
+        line = self.advance().line
+        name = self.expect("NAME", "a name to forget").value
+        self.end_statement()
+        return ast.Forget(name, line)
+
+    def _sigil(self):
+        line = self.advance().line
+        name = self.expect("NAME", "a name for the sigil").value
+        self.expect("be", '"be" and a value')
+        value = self.expression()
+        self.end_statement()
+        return ast.Sigil(name, value, line)
+
+    def _chant(self):
+        line = self.advance().line
+        count = self.unary()       # a primary-ish count, then the value
+        value = self.expression()
+        self.end_statement()
+        return ast.Chant(count, value, line)
 
     def _until(self):
         line = self.advance().line
@@ -374,17 +429,43 @@ class Parser:
         return node
 
     def unary(self):
-        if self.check("not"):
+        tok = self.current
+        if tok.type == "not":
             line = self.advance().line
             return ast.Unary("not", self.unary(), line)
-        if self.current.type in _CAST_OPS:
-            op = self.current.type
+        if tok.type in _CAST_OPS or tok.type in _PREFIX_OPS:
+            op = tok.type
             line = self.advance().line
             return ast.Unary(op, self.unary(), line)
-        return self.primary()
+        if tok.type in ("fracture", "converge"):
+            op = tok.type
+            line = self.advance().line
+            operand = self.unary()
+            self.expect("by", '"by" and a separator')
+            separator = self.unary()
+            return ast.Binary(op, operand, separator, line)
+        return self.postfix()
+
+    def postfix(self):
+        node = self.primary()
+        # indexing:  strand at 0   /   glyph at 2
+        while self.check("at"):
+            line = self.advance().line
+            index = self.primary()
+            node = ast.Binary("at", node, index, line)
+        return node
 
     def primary(self):
         tok = self.current
+
+        if tok.type == "weave":
+            line = self.advance().line
+            elements = []
+            if self.current.type in _EXPR_STARTERS:
+                elements.append(self.expression())
+                while self.accept("COMMA"):
+                    elements.append(self.expression())
+            return ast.StrandLiteral(elements, line)
 
         if tok.type == "NUMBER":
             self.advance()
@@ -439,6 +520,11 @@ _STATEMENT_DISPATCH = {
     "if": Parser._if,
     "repeat": Parser._repeat,
     "until": Parser._until,
+    "ritual": Parser._ritual,
+    "remember": Parser._remember,
+    "forget": Parser._forget,
+    "sigil": Parser._sigil,
+    "chant": Parser._chant,
     "incant": Parser._incant,
     "call": Parser._call,
     "echo": Parser._echo,

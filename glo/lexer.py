@@ -21,11 +21,17 @@ KEYWORDS = {
     "add", "subtract", "scale", "modulate",
     # blocks
     "if", "else", "repeat", "until", "incant", "voice", "invoke",
-    "call", "end", "echo",
+    "call", "end", "echo", "ritual",
     # comparison / logic
     "is", "not", "above", "below", "and", "or",
     # type casts
     "tone", "pulse", "glyph", "flicker",
+    # strands (collections) & glyph-craft
+    "weave", "unweave", "count", "at", "in", "fracture", "converge",
+    # memory & constants
+    "remember", "forget", "as", "sigil",
+    # tone-craft & utterance
+    "ascend", "descend", "chant",
     # words that read as keywords in place
     "channel", "voices",
 }

@@ -118,6 +118,7 @@ Each bound raises a thematic `RitualError`/`UtteranceError` instead of a raw
 | Deep / infinite recursion | `MAX_CALL_DEPTH` checked per incantation call | 1 000 | `GLO_MAX_DEPTH` |
 | Non-terminating `until` loop | iteration counter on every `until` | 10 000 000 | `GLO_MAX_ITERATIONS` |
 | Huge `repeat` count | count validated before looping | 10 000 000 | `GLO_MAX_ITERATIONS` |
+| Oversized `repeat … in` walk / `chant` count | same iteration counter | 10 000 000 | `GLO_MAX_ITERATIONS` |
 | Thread/fork bomb via `voice` | `MAX_VOICES` per run | 256 | `GLO_MAX_VOICES` |
 | `invoke` recursion / fan-out | import-depth cap + idempotent invoke (each scroll loads once) | 64 | `GLO_MAX_INVOKE_DEPTH` |
 | Oversized input (memory) | source-char, total-token, and per-glyph caps **before** allocation | 2 MB / 1e6 / 1e5 | `GLO_MAX_SOURCE`, `GLO_MAX_TOKENS`, `GLO_MAX_GLYPH` |

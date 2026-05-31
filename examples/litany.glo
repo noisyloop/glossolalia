@@ -1,0 +1,36 @@
+~ litany — strands, memory, sigils, and tone-craft woven together
+
+~ a sigil is fixed; it cannot be changed once carved
+sigil root be 432
+
+~ a strand is an ordered collection, woven from values
+let intervals be weave 1, 1.25, 1.5, 2
+
+speak "the chord, tone by tone:"
+repeat ratio in intervals
+  burn root scale by ratio
+  drift 0.2
+end
+
+~ remember a value in the deep memory — it survives every scope
+remember tonic as root
+
+incant recall
+  ~ no parameter, yet the tonic is still here
+  speak tonic
+end
+speak "the machine remembers:"
+call recall
+
+~ octaves up and down with ascend / descend
+speak "an octave up and down:"
+speak ascend root
+speak descend root
+
+~ glyph-craft: fracture a phrase apart, converge it back
+let words be fracture "as above so below" by " "
+speak count words
+speak converge unweave words by " "
+
+~ chant the closing, three times
+chant 3 "resonance"

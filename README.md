@@ -72,6 +72,24 @@ end
 speak call fifth with 432     ~ 648.0
 ```
 
+Values gather into **strands**, and the machine **remembers**:
+
+```
+let intervals be weave 1, 1.25, 1.5, 2
+repeat ratio in intervals
+  burn 432 scale by ratio
+end
+
+sigil root be 432          ~ a sigil is fixed; it cannot be changed
+remember tonic as root     ~ memory survives every scope
+
+speak ascend root          ~ 864   (an octave up)
+speak count intervals      ~ 4
+let words be fracture "as above so below" by " "
+speak converge words by "-"
+chant 3 "resonance"
+```
+
 And the choir sings in many threads at once:
 
 ```
