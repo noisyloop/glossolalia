@@ -4,6 +4,8 @@
     glo repl                 live interactive utterance
     glo check <scroll.glo>   validate syntax without running
     glo trace <scroll.glo>   run, printing AST + execution trace
+    glo serve [--port]       raise a congregation (shared live REPL)
+    glo join <host> [--port] add your voice to a congregation
 """
 
 import argparse
@@ -143,6 +145,18 @@ def cmd_repl(args):
     return 0
 
 
+def cmd_serve(args):
+    from .congregation import DEFAULT_PORT
+    from .congregation.server import run_server
+    return run_server(host=args.host, port=args.port or DEFAULT_PORT)
+
+
+def cmd_join(args):
+    from .congregation import DEFAULT_PORT
+    from .congregation.client import run_client
+    return run_client(host=args.host, port=args.port or DEFAULT_PORT)
+
+
 def build_parser():
     parser = argparse.ArgumentParser(
         prog="glo",
@@ -168,6 +182,19 @@ def build_parser():
 
     p_repl = sub.add_parser("repl", help="live interactive utterance")
     p_repl.set_defaults(func=cmd_repl)
+
+    p_serve = sub.add_parser("serve", help="raise a congregation (shared REPL)")
+    p_serve.add_argument("--host", default="localhost",
+                         help="address to listen on (default: localhost)")
+    p_serve.add_argument("--port", type=int, default=None,
+                         help="port to listen on (default: 7432)")
+    p_serve.set_defaults(func=cmd_serve)
+
+    p_join = sub.add_parser("join", help="add your voice to a congregation")
+    p_join.add_argument("host", help="the congregation's host")
+    p_join.add_argument("--port", type=int, default=None,
+                        help="the congregation's port (default: 7432)")
+    p_join.set_defaults(func=cmd_join)
 
     return parser
 

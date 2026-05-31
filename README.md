@@ -165,6 +165,8 @@ send "/glo/trigger" 1
 | `glo repl`              | live interactive utterance                 |
 | `glo check <scroll>`    | validate syntax without running            |
 | `glo trace <scroll>`    | run, printing the AST + an execution trace |
+| `glo serve [--port]`    | raise a congregation — a shared live REPL  |
+| `glo join <host>`       | add your voice to a congregation           |
 
 ---
 
@@ -179,6 +181,45 @@ speak call solfeggio with 3
 ```
 
 Bundled standard-library scrolls: `tunings`, `rhythms`, `waveforms`.
+
+---
+
+## the congregation — many voices, one machine
+
+A congregation is a live, multiplayer REPL. One process holds a single
+interpreter; many terminals speak into it over WebSockets. What one voice
+utters, every machine hears and executes.
+
+```bash
+pip install -e .            # websockets ships with the interpreter now
+glo serve                   # raise a congregation on :7432
+```
+
+In another terminal — or on another machine — add your voice:
+
+```bash
+glo join localhost
+```
+
+Each voice is given a name from the choir (`low`, `mid`, `high`, `root`,
+`fifth`, `ghost`) and a colour. Then:
+
+```
+low ⟫ remember tonic as 432      ~ shared truth: every voice reads it
+mid ⟫ speak tonic                ~ 432
+low ⟫ burn ascend tonic          ~ the waveform appears in every terminal
+mid ⟫ let mine be 7              ~ local — yours alone, never broadcast
+low ⟫ sync voices                ~ blocks until everyone breathes
+mid ⟫ breathe                    ~ … and the congregation moves as one
+mid ⟫ \who                       ~ list the gathered voices
+low ⟫ \part                      ~ leave gracefully
+```
+
+`remember` and `sigil` are the congregation's shared state; local
+`let`/`set` stay with the voice that spoke them. If a voice goes silent
+mid-`sync`, the barrier releases and the machine says so. The shared
+evaluator never crashes the choir — a faulty utterance is spoken back as an
+error and the gathering plays on.
 
 ---
 
@@ -199,6 +240,7 @@ Bundled standard-library scrolls: `tunings`, `rhythms`, `waveforms`.
 | 2 — Tongue       | math, control flow, bindings, incantations        | ✅     |
 | 3 — Choir        | voices, audio, OSC, the scroll/`invoke` system    | ✅     |
 | 4 — Scripture    | `repl` / `check` / `trace`, spec, packaging       | ✅     |
+| 5 — Congregation | shared live REPL over WebSockets — `serve` / `join` | ✅   |
 
 ---
 
