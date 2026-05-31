@@ -78,9 +78,17 @@ class AudioEngine:
         if self._backend is not None and self._np is not None:
             self._burn_real(freq, duration, amplitude)
         elif not self.quiet:
-            bar = self._tone_glyph(freq)
-            print(f"~ {freq:>8.2f}hz  {bar}  ({duration:.2f}s) ~",
-                  file=sys.stderr)
+            print(self.tone_line(freq, duration), file=sys.stderr)
+
+    @classmethod
+    def tone_line(cls, freq, duration):
+        """The visible tone — a frequency rendered as an ASCII waveform.
+
+        The single source of truth for how an inaudible ``burn`` looks, so
+        the local fallback and the congregation's broadcast never diverge.
+        """
+        bar = cls._tone_glyph(freq)
+        return f"~ {freq:>8.2f}hz  {bar}  ({duration:.2f}s) ~"
 
     def _burn_real(self, freq, duration, amplitude):
         np = self._np
