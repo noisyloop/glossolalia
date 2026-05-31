@@ -489,11 +489,11 @@ class Interpreter:
         if op == "add":
             if isinstance(left, str) or isinstance(right, str):
                 return to_glyph(left) + to_glyph(right)
-            return left + right
+            return self._arith(left, right, "add", node.line)
         if op == "subtract":
-            return left - right
+            return self._arith(left, right, "subtract", node.line)
         if op == "scale":
-            return left * right
+            return self._arith(left, right, "scale", node.line)
         if op == "modulate":
             return self._modulo(left, right, node.line)
         if op == "at":
@@ -510,6 +510,42 @@ class Interpreter:
             return left % right
         except ZeroDivisionError:
             raise RitualError("the machine cannot modulate by nothing", line)
+        except TypeError:
+            raise RitualError(
+                "these two cannot be modulated together", line
+            )
+
+    _ARITH_WORD = {"add": "added", "subtract": "subtracted", "scale": "scaled"}
+
+    def _arith(self, left, right, op, line):
+        try:
+            if op == "add":
+                return left + right
+            if op == "subtract":
+                return left - right
+            return left * right
+        except TypeError:
+            raise RitualError(
+                f"a {self._name_of(left)} and a {self._name_of(right)} "
+                f"cannot be {self._ARITH_WORD[op]} together",
+                line,
+            )
+
+    @staticmethod
+    def _name_of(value):
+        if isinstance(value, bool):
+            return "flicker"
+        if isinstance(value, int):
+            return "pulse"
+        if isinstance(value, float):
+            return "tone"
+        if isinstance(value, str):
+            return "glyph"
+        if isinstance(value, list):
+            return "strand"
+        if value is None:
+            return "void"
+        return "thing"
 
     def _index(self, target, index, line):
         if not isinstance(target, (list, str)):

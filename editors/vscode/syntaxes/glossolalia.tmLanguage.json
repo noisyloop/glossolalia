@@ -1,0 +1,109 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Glossolalia",
+  "scopeName": "source.glo",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#strings" },
+    { "include": "#numbers" },
+    { "include": "#booleans" },
+    { "include": "#blocks" },
+    { "include": "#control" },
+    { "include": "#commands" },
+    { "include": "#operators" },
+    { "include": "#types" },
+    { "include": "#structure" },
+    { "include": "#definition-names" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.tilde.glo",
+          "match": "~.*$"
+        }
+      ]
+    },
+    "strings": {
+      "name": "string.quoted.double.glo",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [
+        {
+          "name": "constant.character.escape.glo",
+          "match": "\\\\(n|t|\"|\\\\)"
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.tone.glo",
+          "match": "\\b-?\\d+\\.\\d+\\b"
+        },
+        {
+          "name": "constant.numeric.pulse.glo",
+          "match": "\\b-?\\d+\\b"
+        }
+      ]
+    },
+    "booleans": {
+      "name": "constant.language.flicker.glo",
+      "match": "\\b(true|false|void)\\b"
+    },
+    "blocks": {
+      "name": "keyword.control.block.glo",
+      "match": "\\b(incant|voice|ritual|invoke|call|takes|end)\\b"
+    },
+    "control": {
+      "name": "keyword.control.flow.glo",
+      "match": "\\b(if|else|repeat|until|in|echo|breathe)\\b"
+    },
+    "commands": {
+      "name": "support.function.command.glo",
+      "match": "\\b(speak|hush|burn|rise|fall|drift|silence|open|close|channel|send|sync|voices|chant|remember|forget)\\b"
+    },
+    "operators": {
+      "patterns": [
+        {
+          "name": "keyword.operator.logic.glo",
+          "match": "\\b(is|not|above|below|and|or)\\b"
+        },
+        {
+          "name": "keyword.operator.arithmetic.glo",
+          "match": "\\b(add|subtract|scale|modulate|ascend|descend)\\b"
+        },
+        {
+          "name": "keyword.operator.strand.glo",
+          "match": "\\b(weave|unweave|count|at|fracture|converge)\\b"
+        }
+      ]
+    },
+    "types": {
+      "name": "storage.type.glo",
+      "match": "\\b(tone|pulse|glyph|flicker|sigil)\\b"
+    },
+    "structure": {
+      "name": "keyword.other.structure.glo",
+      "match": "\\b(let|be|set|to|by|with|for|as)\\b"
+    },
+    "definition-names": {
+      "patterns": [
+        {
+          "match": "\\b(incant|voice)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": { "name": "keyword.control.block.glo" },
+            "2": { "name": "entity.name.function.glo" }
+          }
+        },
+        {
+          "match": "\\b(let|sigil|remember)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": { "name": "keyword.other.structure.glo" },
+            "2": { "name": "variable.other.glo" }
+          }
+        }
+      ]
+    }
+  }
+}
