@@ -1,0 +1,64 @@
+~ tongue: bare
+~ repeat, until, nesting; early exit from an incantation
+let total be 0
+repeat 10
+  add total by 3
+end
+speak total
+
+let i be 0
+until i is 5
+  speak i scale by i
+  rise i
+end
+
+~ multiplication table corner, nested loops
+let row be 1
+until row above 3
+  let col be 1
+  let line_sum be 0
+  until col above 4
+    add line_sum by row scale by col
+    rise col
+  end
+  speak line_sum
+  rise row
+end
+
+~ repeat 0 and a negative count do nothing
+repeat 0
+  speak 999
+end
+repeat 0 subtract by 3
+  speak 998
+end
+
+~ fizz / buzz with modulate
+let n be 1
+until n above 15
+  if n modulate by 15 is 0
+    speak "fizzbuzz"
+  else
+    if n modulate by 3 is 0
+      speak "fizz"
+    else
+      if n modulate by 5 is 0
+        speak "buzz"
+      else
+        speak n
+      end
+    end
+  end
+  rise n
+end
+
+incant first_square_over takes limit
+  let k be 1
+  until 0
+    if k scale by k above limit
+      echo k
+    end
+    rise k
+  end
+end
+speak call first_square_over with 1000

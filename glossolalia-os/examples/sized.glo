@@ -1,0 +1,38 @@
+~ tongue: bare
+~ sized pulses wrap around inside their width
+let x be p8 250
+add x by 10
+speak x
+let w be p16 65535
+rise w
+speak w
+let d be p32 4294967295
+rise d
+speak d
+speak p8 300
+speak p16 70000
+speak p32 -1
+speak p8 -1
+let t be x
+add t by 300
+speak t
+speak x add by 10
+set x to 1000
+speak x
+let big be p32 4000000000
+speak big
+speak big above 3000000000
+speak (p32 5) below (p32 4000000000)
+speak 0 subtract by 1
+let plain be 250
+add plain by 10
+speak plain
+
+~ parameters are plain pulses, whatever the caller held
+incant bump takes v
+  add v by 10
+  echo v
+end
+let small be p8 250
+speak call bump with small
+speak small

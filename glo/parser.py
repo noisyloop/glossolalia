@@ -19,23 +19,30 @@ Operator precedence in expressions, lowest to highest:
 from . import ast_nodes as ast
 from .errors import GrammarError
 from .lexer import tokenize
+from .pulses import SIZES
 
 
 # Words that, appearing at the start of a line, begin a statement.
 _BLOCK_TERMINATORS = {"end", "else"}
 
 # Infix word-operators grouped by precedence tier.
+# The hardware words are ordinary names to the lexer. Inside a ``rite`` the
+# parser reads them as words of the bare tongue; outside, they stay names.
+_HARDWARE_STATEMENTS = {"inscribe", "whisper"}
+_HARDWARE_OPERANDS = {"peek", "listen"}
+
 _COMPARE_OPS = {"is", "not", "above", "below"}
 _ADDITIVE_OPS = {"add", "subtract"}
 _MULTIPLICATIVE_OPS = {"scale", "modulate"}
 _CAST_OPS = {"tone", "pulse", "glyph", "flicker"}
 # prefix word-operators that take a single operand
-_PREFIX_OPS = {"count", "ascend", "descend", "unweave"}
+_PREFIX_OPS = {"count", "ascend", "descend", "unweave",
+               "bones", "flesh", "unseal"}
 # tokens that can begin an expression (used to detect an empty `weave`)
 _EXPR_STARTERS = (
     {"NUMBER", "STRING", "NAME", "void", "call", "LPAREN", "not",
      "weave", "unweave", "count", "ascend", "descend", "fracture",
-     "converge"}
+     "converge", "heed", "bones", "flesh", "unseal"}
     | _CAST_OPS
 )
 
@@ -44,6 +51,12 @@ class Parser:
     def __init__(self, tokens):
         self.tokens = tokens
         self.pos = 0
+        # How many ``rite`` blocks we are inside. The hardware words
+        # (inscribe, peek, whisper, listen) are only legal when > 0.
+        self.rite_depth = 0
+        # While parsing the value of ``inscribe <value> at <address>`` the
+        # word "at" must end the value instead of meaning "index into".
+        self.stop_at = False
 
     # ── token helpers ────────────────────────────────────────────
     @property
@@ -134,6 +147,11 @@ class Parser:
     def statement(self):
         tok = self.current
         handler = _STATEMENT_DISPATCH.get(tok.type)
+        if (handler is None and tok.type == "NAME"
+                and tok.value in _HARDWARE_STATEMENTS):
+            self._need_rite(tok.value, tok.line)
+            handler = (Parser._inscribe if tok.value == "inscribe"
+                       else Parser._whisper)
         if handler is None:
             # A bare NAME at statement start is almost always a typo or a
             # word the machine doesn't know in this position.
@@ -379,6 +397,96 @@ class Parser:
         self.end_statement()
         return ast.Invoke(scroll, line)
 
+    # ── bare tongue ──────────────────────────────────────────────
+    def _need_rite(self, word, line):
+        if self.rite_depth == 0:
+            raise GrammarError(
+                f'the machine will not "{word}" outside a rite', line
+            )
+
+    def _rite(self):
+        line = self.advance().line
+        self.end_statement()
+        self.rite_depth += 1
+        try:
+            body, _ = self.parse_block(("end",))
+        finally:
+            self.rite_depth -= 1
+        self.end_statement()
+        return ast.Rite(body, line)
+
+    def _ward(self):
+        line = self.advance().line
+        vector = self.expression()
+        self.end_statement()
+        body, _ = self.parse_block(("end",))
+        self.end_statement()
+        return ast.Ward(vector, body, line)
+
+    def _inscribe(self):
+        line = self.advance().line
+        self._need_rite("inscribe", line)
+        saved, self.stop_at = self.stop_at, True
+        try:
+            value = self.expression()
+        finally:
+            self.stop_at = saved
+        self.expect("at", '"at" and an address')
+        address = self.expression()
+        self.end_statement()
+        return ast.Inscribe(value, address, line)
+
+    def _whisper(self):
+        line = self.advance().line
+        self._need_rite("whisper", line)
+        value = self.expression()
+        self.expect("to", '"to port" and a port number')
+        self._expect_port()
+        port = self.expression()
+        self.end_statement()
+        return ast.Whisper(value, port, line)
+
+    def _engrave(self):
+        line = self.advance().line
+        value = self.expression()
+        if self.accept("onto"):
+            append = True
+        else:
+            self.expect("to", '"to" or "onto" and a path')
+            append = False
+        path = self.expression()
+        self.end_statement()
+        return ast.Engrave(value, path, append, line)
+
+    def _depart(self):
+        line = self.advance().line
+        code = None
+        if not self.check("NEWLINE") and not self.check("EOF"):
+            code = self.expression()
+        self.end_statement()
+        return ast.Depart(code, line)
+
+    def _expect_port(self):
+        tok = self.current
+        if tok.type == "NAME" and tok.value == "port":
+            self.advance()
+            return
+        raise GrammarError(
+            f'the machine expected "port" but heard "{self._describe(tok)}"',
+            tok.line,
+        )
+
+    def _sized_word(self):
+        """If the next token is a size word (p8 / p16 / p32), eat it and
+        return its width; otherwise return None. Size words are ordinary
+        names to the lexer, so scrolls that never heard of them still work.
+        """
+        tok = self.current
+        if tok.type == "NAME" and tok.value in SIZES:
+            self.advance()
+            return SIZES[tok.value]
+        return None
+
     # ── expressions ──────────────────────────────────────────────
     def expression(self):
         return self.logic_or()
@@ -437,6 +545,22 @@ class Parser:
             op = tok.type
             line = self.advance().line
             return ast.Unary(op, self.unary(), line)
+        if tok.type == "NAME" and tok.value in SIZES:
+            # p8 / p16 / p32 — a cast that wraps around inside its width
+            line = self.advance().line
+            return ast.Unary(tok.value, self.unary(), line)
+        if (tok.type == "NAME" and tok.value in _HARDWARE_OPERANDS
+                and self.peek().type in _EXPR_STARTERS):
+            # `peek 100` / `listen port 0x60`: an operand follows, so this is
+            # the bare-tongue word, not a plain name.
+            line = self.advance().line
+            self._need_rite(tok.value, line)
+            if tok.value == "peek":
+                bits = self._sized_word() or 0
+                return ast.Peek(self.unary(), bits, line)
+            bits = self._sized_word() or 8
+            self._expect_port()
+            return ast.Listen(self.unary(), bits, line)
         if tok.type in ("fracture", "converge"):
             op = tok.type
             line = self.advance().line
@@ -449,7 +573,7 @@ class Parser:
     def postfix(self):
         node = self.primary()
         # indexing:  strand at 0   /   glyph at 2
-        while self.check("at"):
+        while self.check("at") and not self.stop_at:
             line = self.advance().line
             index = self.primary()
             node = ast.Binary("at", node, index, line)
@@ -489,9 +613,17 @@ class Parser:
             args = self._call_args()
             return ast.CallExpr(name, args, line)
 
+        if tok.type == "heed":
+            self.advance()
+            return ast.Heed(tok.line)
+
         if tok.type == "LPAREN":
             self.advance()
-            node = self.expression()
+            saved, self.stop_at = self.stop_at, False   # parens re-allow "at"
+            try:
+                node = self.expression()
+            finally:
+                self.stop_at = saved
             self.expect("RPAREN", "a closing )")
             return node
 
@@ -535,6 +667,12 @@ _STATEMENT_DISPATCH = {
     "close": Parser._close,
     "send": Parser._send,
     "invoke": Parser._invoke,
+    "rite": Parser._rite,
+    "ward": Parser._ward,
+    "inscribe": Parser._inscribe,
+    "whisper": Parser._whisper,
+    "engrave": Parser._engrave,
+    "depart": Parser._depart,
 }
 
 

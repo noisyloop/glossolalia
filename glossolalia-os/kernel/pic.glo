@@ -1,0 +1,43 @@
+~ tongue: bare
+~ kernel/pic.glo — the Programmable Interrupt Controller.
+~
+~ Hardware devices (the timer, the keyboard ...) do not talk to the CPU
+~ directly. They raise one of 16 lines (IRQ 0-15) on two chained 8259 PIC
+~ chips, which turn the line into an interrupt vector number for the CPU.
+~ The trouble: by default the PICs map IRQ 0-7 onto vectors 8-15, which are
+~ also where the CPU reports its own faults (8 is "double fault"). So the
+~ first job is to REMAP them: IRQ 0-7 to vectors 32-39, IRQ 8-15 to 40-47.
+~
+~ The chips are told this in four "initialisation command words", written
+~ to their ports in order: the master is at 0x20/0x21, the slave at 0xA0/0xA1.
+
+rite
+  ~ Old hardware needs a moment between writes. Port 0x80 is an unused
+  ~ "POST code" port: writing to it takes about a microsecond.
+  incant io_wait
+    whisper p8 0 to port 0x80
+  end
+
+  incant pic_init
+    whisper p8 0x11 to port 0x20     ~ ICW1: begin initialising (master)...
+    call io_wait
+    whisper p8 0x11 to port 0xA0     ~ ...and the slave
+    call io_wait
+    whisper p8 32 to port 0x21       ~ ICW2: master's IRQ 0 is vector 32
+    call io_wait
+    whisper p8 40 to port 0xA1       ~ ICW2: slave's IRQ 8 is vector 40
+    call io_wait
+    whisper p8 4 to port 0x21        ~ ICW3: the slave hangs off IRQ 2
+    call io_wait
+    whisper p8 2 to port 0xA1        ~ ICW3: ...and knows it is "cascade 2"
+    call io_wait
+    whisper p8 1 to port 0x21        ~ ICW4: 8086 mode
+    call io_wait
+    whisper p8 1 to port 0xA1
+    call io_wait
+    ~ Masks: a 1 bit silences that line. Let only IRQ 0 (timer) and
+    ~ IRQ 1 (keyboard) through; silence everything on the slave.
+    whisper p8 0xFC to port 0x21
+    whisper p8 0xFF to port 0xA1
+  end
+end

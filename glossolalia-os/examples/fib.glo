@@ -1,0 +1,62 @@
+~ tongue: bare
+~ incantations: recursion, several arguments, results
+incant fib takes n
+  if n below 2
+    echo n
+  end
+  echo (call fib with (n subtract by 1)) add by (call fib with (n subtract by 2))
+end
+
+incant fact takes n
+  if n below 2
+    echo 1
+  end
+  echo n scale by (call fact with (n subtract by 1))
+end
+
+incant gcd takes a, b
+  until b is 0
+    let t be b
+    set b to a modulate by b
+    set a to t
+  end
+  echo a
+end
+
+incant ack takes m, n
+  if m is 0
+    echo n add by 1
+  end
+  if n is 0
+    echo call ack with (m subtract by 1), 1
+  end
+  echo call ack with (m subtract by 1), (call ack with m, (n subtract by 1))
+end
+
+incant is_prime takes n
+  if n below 2
+    echo 0
+  end
+  let d be 2
+  until d scale by d above n
+    if n modulate by d is 0
+      echo 0
+    end
+    rise d
+  end
+  echo 1
+end
+
+speak call fib with 20
+speak call fact with 10
+speak call gcd with 1071, 462
+speak call ack with 2, 3
+let primes be 0
+let p be 0
+until p is 100
+  if call is_prime with p
+    rise primes
+  end
+  rise p
+end
+speak primes

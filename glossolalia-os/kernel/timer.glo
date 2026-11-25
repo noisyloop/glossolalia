@@ -1,0 +1,46 @@
+~ tongue: bare
+~ kernel/timer.glo — the Programmable Interval Timer, and `drift`.
+~
+~ The PIT is a chip with a 1,193,182 Hz crystal and a counter that can be
+~ told to count down from N and raise IRQ 0 every time it reaches zero. We
+~ ask for N = 1193, which is a tick every 0.99997 ms: one tick per
+~ millisecond, near enough. The timer's interrupt handler (a `ward`) just
+~ counts ticks; everything else — `drift`, uptime — is arithmetic on that
+~ count.
+
+invoke "idt"
+
+rite
+  let ticks be 0                   ~ milliseconds since the timer started
+
+  incant timer_init
+    whisper p8 0x34 to port 0x43   ~ channel 0, low byte then high byte, mode 2 (rate generator)
+    whisper p8 0xA9 to port 0x40   ~ 1193 = 0x04A9: low byte...
+    whisper p8 0x04 to port 0x40   ~ ...high byte
+    call idt_set with 32, (call ward_addr with 32)
+  end
+
+  ~ IRQ 0 arrives as vector 32. A handler must tell the PIC it is done (EOI,
+  ~ "end of interrupt": write 0x20 to the master's command port) or the PIC
+  ~ will never send another one.
+  ward 32
+    rise ticks
+    whisper p8 0x20 to port 0x20
+  end
+
+  ~ drift: sleep this many milliseconds. `hlt` stops the CPU until the next
+  ~ interrupt, so waiting costs no power; the timer wakes us every tick to
+  ~ check. (Interrupts must be on: `call sti`.)
+  incant timer_sleep takes ms
+    let wake_at be ticks add by ms
+    until ticks above wake_at
+      call hlt
+    end
+  end
+
+  ~ the `drift` statement compiles to a call to t_drift (rt/core.glo's
+  ~ contract with its target); on bare metal it is timer_sleep
+  incant t_drift takes ms
+    call timer_sleep with ms
+  end
+end

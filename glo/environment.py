@@ -6,6 +6,7 @@ walking outward toward the global scroll.
 """
 
 from .errors import RitualError
+from .pulses import SizedPulse
 
 
 class Environment:
@@ -22,6 +23,14 @@ class Environment:
         env = self
         while env is not None:
             if name in env.vars:
+                old = env.vars[name]
+                # A name born as a sized pulse stays that size: whatever is
+                # stored into it wraps around inside its width (p8 250 + 10
+                # is 4). This is the whole of "wrap-around overflow".
+                if (isinstance(old, SizedPulse)
+                        and isinstance(value, int)
+                        and not isinstance(value, bool)):
+                    value = SizedPulse(value, old.bits)
                 env.vars[name] = value
                 return
             env = env.parent

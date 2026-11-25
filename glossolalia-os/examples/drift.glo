@@ -1,0 +1,8 @@
+~ tongue: bare
+~ drift sleeps: whole milliseconds when compiled, seconds on the interpreter
+~ (which the test runner scales to zero). Either way the output is the same.
+speak "before"
+drift 20
+speak "after"
+drift
+speak "done"

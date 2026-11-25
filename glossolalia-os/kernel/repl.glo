@@ -1,0 +1,173 @@
+~ tongue: bare
+~ kernel/repl.glo — a tiny read-eval-print loop.
+~
+~ The first thing a kernel can do that feels like an operating system: show
+~ a prompt, wait for you to type a line, do what it says. It needs only the
+~ keyboard driver (to get characters) and the console (to show them).
+~
+~ Everything is bytes in memory: the line you are typing lives at a fixed
+~ address, and "does the line say help?" is a byte-by-byte comparison.
+invoke "console"
+invoke "keyboard"
+invoke "timer"
+invoke "speaker"
+
+rite
+  let line_buf be 0x00381000       ~ the line being typed (NUL-terminated)
+  let line_len be 0
+  let num_end be 0                 ~ where parse_num stopped reading
+
+  ~ Read a line, echoing as we go. Backspace erases; Enter ends the line.
+  incant read_line
+    set line_len to 0
+    let going be 1
+    until going is 0
+      let c be call kb_getc
+      if c is 10
+        call console_putc with 10
+        set going to 0
+      else
+        if c is 8
+          if line_len above 0
+            fall line_len
+            call console_putc with 8
+          end
+        else
+          if line_len below 120
+            inscribe p8 c at line_buf add by line_len
+            rise line_len
+            call console_putc with c
+          end
+        end
+      end
+    end
+    inscribe p8 0 at line_buf add by line_len
+  end
+
+  ~ does the line start with this text, followed by a space or the end?
+  incant line_is takes text_ptr, text_length
+    let i be 0
+    until i is text_length
+      if (peek p8 (line_buf add by i)) not (peek p8 (text_ptr add by i))
+        echo 0
+      end
+      rise i
+    end
+    let after be peek p8 (line_buf add by text_length)
+    echo after is 0 or after is 32
+  end
+
+  incant skip_spaces takes from
+    until (peek p8 (line_buf add by from)) not 32
+      rise from
+    end
+    echo from
+  end
+
+  ~ read a decimal or 0x-hex number starting at index i; leaves the index
+  ~ just past it in num_end
+  incant parse_num takes i
+    let base be 10
+    if (peek p8 (line_buf add by i)) is 48 and (peek p8 (line_buf add by i add by 1)) is 120
+      set base to 16
+      add i by 2
+    end
+    let value be 0
+    let going be 1
+    until going is 0
+      let c be peek p8 (line_buf add by i)
+      let d be 99
+      if c above 47 and c below 58
+        set d to c subtract by 48
+      end
+      if c above 96 and c below 103
+        set d to c subtract by 87
+      end
+      if d below base
+        set value to value scale by base add by d
+        rise i
+      else
+        set going to 0
+      end
+    end
+    set num_end to i
+    echo value
+  end
+
+  incant run_command
+    if line_len is 0
+      void
+    end
+    if call line_is with (call text_addr with "help"), (call text_len with "help")
+      speak "commands:"
+      speak "  help             this list"
+      speak "  echo <text>      say it back"
+      speak "  add <a> <b>      add two numbers (decimal or 0x hex)"
+      speak "  peek <address>   read a byte of memory"
+      speak "  ticks            milliseconds since boot"
+      speak "  uptime           seconds since boot"
+      speak "  burn <hz> [ms]   sound a tone (until silence, or for ms)"
+      speak "  silence          stop the tone"
+      speak "  halt             stop the machine"
+      void
+    end
+    if call line_is with (call text_addr with "echo"), (call text_len with "echo")
+      let i be call skip_spaces with 4
+      until i is line_len
+        call console_putc with (peek p8 (line_buf add by i))
+        rise i
+      end
+      call console_putc with 10
+      void
+    end
+    if call line_is with (call text_addr with "add"), (call text_len with "add")
+      let a be call parse_num with (call skip_spaces with 3)
+      let b be call parse_num with (call skip_spaces with num_end)
+      speak a add by b
+      void
+    end
+    if call line_is with (call text_addr with "peek"), (call text_len with "peek")
+      let where be call parse_num with (call skip_spaces with 4)
+      speak peek p8 where
+      void
+    end
+    if call line_is with (call text_addr with "ticks"), (call text_len with "ticks")
+      speak ticks
+      void
+    end
+    if call line_is with (call text_addr with "uptime"), (call text_len with "uptime")
+      speak call udiv with ticks, 1000
+      void
+    end
+    if call line_is with (call text_addr with "burn"), (call text_len with "burn")
+      let hz be call parse_num with (call skip_spaces with 4)
+      let rest be call skip_spaces with num_end
+      speak hz
+      if rest below line_len
+        let ms be call parse_num with rest
+        burn hz for ms
+      else
+        burn hz
+      end
+      void
+    end
+    if call line_is with (call text_addr with "silence"), (call text_len with "silence")
+      silence
+      void
+    end
+    if call line_is with (call text_addr with "halt"), (call text_len with "halt")
+      speak "halting"
+      depart 0
+    end
+    speak "unknown command (try help)"
+  end
+
+  incant repl
+    speak "type help for commands."
+    until 0
+      call say with "glo> "
+      call read_line
+      call run_command
+    end
+  end
+end

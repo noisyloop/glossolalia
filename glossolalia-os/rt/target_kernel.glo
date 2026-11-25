@@ -1,0 +1,30 @@
+~ tongue: bare
+~ rt/target_kernel.glo — what the runtime needs from bare metal.
+~
+~ The runtime asks for two hooks, as on Linux:
+~     t_putc c      write one byte to the console
+~     t_exit code   stop
+~
+~ On bare metal the console is a driver the kernel program supplies as
+~ `console_putc` (screen + serial, kernel/console.glo); we only forward to it.
+~ (`drift` is provided by kernel/timer.glo, since it needs the timer.)
+~ "Exit" has no kernel to return to: we tell QEMU's test device (if one is
+~ plugged in) and then sleep forever.
+
+rite
+  let t_scratch be 0x003F0000
+
+  incant t_putc takes c
+    call console_putc with c
+  end
+
+  ~ QEMU's isa-debug-exit device sits at port 0xF4: writing a byte v there
+  ~ ends QEMU with status (v*2)+1, which is how a test reports pass or fail.
+  ~ Without that device the write goes nowhere and we just halt.
+  incant t_exit takes code
+    whisper p8 code to port 0xF4
+    until 0
+      call hlt
+    end
+  end
+end

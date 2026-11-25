@@ -1,0 +1,19 @@
+~ tongue: bare
+invoke "rt/bits"
+~ every result is shown unsigned (p32) so the two worlds print alike
+speak p32 (call shl with 1, 31)
+speak p32 (call shl with 3, 4)
+speak p32 (call shr with 0xF0F0F0F0 add by 0, 4)
+speak call shr with 1000, 3
+speak call sar with 0 subtract by 16, 2
+speak call sar with 4096, 4
+speak call band with 0xFF00FF, 0x0FF0F0
+speak call bor with 0xFF00FF, 0x0FF0F0
+speak call bxor with 0xFF00FF, 0x0FF0F0
+speak p32 (call bxor with 0, 0 subtract by 1)
+speak call udiv with 1000000, 7
+speak call umod with 1000000, 7
+speak call sdiv with 0 subtract by 100, 7
+speak call sdiv with 100, 0 subtract by 7
+speak call sdiv with 0 subtract by 100, 0 subtract by 7
+speak call udiv with 12345, 1

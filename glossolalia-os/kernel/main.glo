@@ -1,0 +1,13 @@
+~ tongue: bare
+~ kernel/main.glo — the operating system.
+~ GRUB loads us, targets/kernel.asm sets up a stack, and then the statements
+~ below run, top to bottom, exactly as in any scroll.
+invoke "console"
+invoke "interrupts"
+invoke "repl"
+
+call console_init
+speak "glossolalia-os"
+speak "the machine listens."
+call interrupts_init
+call repl

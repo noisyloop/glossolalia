@@ -1,0 +1,8 @@
+~ tongue: bare
+~ burn and silence: no speaker for a normal process, so the Linux target is
+~ silent (the interpreter only draws tones on stderr). The text agrees.
+speak "playing"
+burn 440 for 10
+burn 880
+silence
+speak "done"

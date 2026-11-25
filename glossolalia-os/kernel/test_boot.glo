@@ -1,0 +1,12 @@
+~ tongue: bare
+~ kernel/test_boot.glo — milestone 2's self-test: speak, then report pass.
+invoke "console"
+
+call console_init
+speak "glossolalia-os"
+speak "the machine listens."
+speak 12345
+speak 0 subtract by 7
+speak "boot ok"
+~ qemu's isa-debug-exit turns this into exit status (16 * 2) + 1 = 33
+depart 16

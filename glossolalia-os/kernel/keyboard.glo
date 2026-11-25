@@ -1,0 +1,146 @@
+~ tongue: bare
+~ kernel/keyboard.glo — the PS/2 keyboard.
+~
+~ A keyboard does not send letters, it sends SCANCODES: one byte when a key
+~ goes down (a "make" code) and the same byte with bit 7 set when it comes
+~ up (a "break" code). Turning scancodes into characters — and knowing
+~ whether Shift is held — is the driver's job. So the work is:
+~
+~   1. IRQ 1 fires; the handler reads the scancode from port 0x60;
+~   2. Shift keys update a flag; other make codes are looked up in a table
+~      and the character is put in a ring buffer;
+~   3. whoever wants a key takes it from the buffer (sleeping with `hlt`
+~      while it is empty), optionally giving up after a timeout.
+~
+~ The controller chip (an 8042) is slow and talks through two ports: 0x60
+~ for data, 0x64 for status/commands. Status bit 0 = "a byte is waiting for
+~ you", bit 1 = "still busy with the last byte you wrote". Real hardware can
+~ be dead or absent, so every wait here has a TIMEOUT instead of spinning
+~ forever.
+
+invoke "idt"
+invoke "timer"
+
+rite
+  let kb_head be 0                 ~ next free slot in the ring buffer
+  let kb_tail be 0                 ~ next character to hand out
+  let kb_shift be 0                ~ 1 while a Shift key is down
+  let kb_buf be 0x00380000         ~ the 256-byte ring buffer
+
+  ~ Scancode set 1, US layout, for make codes 0x00..0x39. A tab marks a key
+  ~ that makes no printable character (Esc, Ctrl, Shift ... handled apart).
+  incant kb_table_lower
+    echo call text_addr with "\t\t1234567890-=\t\tqwertyuiop[]\t\tasdfghjkl;'`\t\\zxcvbnm,./\t*\t "
+  end
+  incant kb_table_upper
+    echo call text_addr with "\t\t!@#$%^&*()_+\t\tQWERTYUIOP{}\t\tASDFGHJKL:\"~\t|ZXCVBNM<>?\t*\t "
+  end
+
+  ~ wait until the controller will accept a byte; 1 if it did, 0 if it timed out
+  incant ps2_wait_write
+    let spins be 0
+    until (call band with (listen port 0x64), 2) is 0 or spins above 100000
+      rise spins
+    end
+    echo spins below 100001
+  end
+
+  ~ wait until the controller has a byte for us; 1 if so, 0 on timeout
+  incant ps2_wait_read
+    let spins be 0
+    until (call band with (listen port 0x64), 1) is 1 or spins above 100000
+      rise spins
+    end
+    echo spins below 100001
+  end
+
+  incant kb_init
+    ~ drain anything the firmware left in the output buffer (bounded: 16)
+    let drained be 0
+    until (call band with (listen port 0x64), 1) is 0 or drained above 16
+      let junk be listen port 0x60
+      rise drained
+    end
+    ~ read the controller's configuration byte, turn on IRQ 1 (bit 0) and
+    ~ scancode translation to set 1 (bit 6), and write it back
+    if call ps2_wait_write
+      whisper p8 0x20 to port 0x64
+      if call ps2_wait_read
+        let config be listen port 0x60
+        set config to call bor with config, 0x41
+        if call ps2_wait_write
+          whisper p8 0x60 to port 0x64
+          if call ps2_wait_write
+            whisper p8 config to port 0x60
+          end
+        end
+      end
+    end
+    call idt_set with 33, (call ward_addr with 33)
+  end
+
+  incant kb_push takes c
+    let next be (kb_head add by 1) modulate by 256
+    if next not kb_tail            ~ a full buffer drops the key
+      inscribe p8 c at kb_buf add by kb_head
+      set kb_head to next
+    end
+  end
+
+  ~ IRQ 1 arrives as vector 33
+  ward 33
+    let sc be listen port 0x60
+    if sc is 0x2A or sc is 0x36
+      set kb_shift to 1            ~ a Shift key went down
+    end
+    if sc is 0xAA or sc is 0xB6
+      set kb_shift to 0            ~ ...and up
+    end
+    if sc below 0x3A               ~ a make code for a key we know
+      if sc is 0x1C
+        call kb_push with 10       ~ Enter
+      else
+        if sc is 0x0E
+          call kb_push with 8      ~ Backspace
+        else
+          let ch be 9
+          if kb_shift is 1
+            set ch to peek p8 ((call kb_table_upper) add by sc)
+          else
+            set ch to peek p8 ((call kb_table_lower) add by sc)
+          end
+          if ch not 9
+            call kb_push with ch
+          end
+        end
+      end
+    end
+    whisper p8 0x20 to port 0x20   ~ end of interrupt
+  end
+
+  incant kb_take
+    let c be peek p8 (kb_buf add by kb_tail)
+    set kb_tail to (kb_tail add by 1) modulate by 256
+    echo c
+  end
+
+  ~ the next character, sleeping until there is one
+  incant kb_getc
+    until kb_head not kb_tail
+      call hlt
+    end
+    echo call kb_take
+  end
+
+  ~ the next character, or -1 if none arrives within ms milliseconds
+  incant kb_getc_timeout takes ms
+    let give_up be ticks add by ms
+    until kb_head not kb_tail
+      if ticks above give_up
+        echo 0 subtract by 1
+      end
+      call hlt
+    end
+    echo call kb_take
+  end
+end

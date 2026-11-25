@@ -115,6 +115,46 @@ silence
 
 ---
 
+## the bare tongue (for machines with no heap)
+
+A second, smaller tongue sits beneath the first, for writing operating
+systems and compilers (see glossolalia-os). It adds hex literals, pulses
+that **wrap** inside their width, and words that touch the machine:
+
+```
+let b be p8 250
+add b by 10                      ~ b is 4: 260 wraps inside 8 bits
+rite                             ~ the hardware words work only in a rite
+  inscribe p16 0x0F41 at 0xB8000     ~ write memory
+  speak peek p8 0xB8000              ~ read memory
+  whisper p8 0x2A to port 0xE9       ~ write an I/O port
+  speak listen port 0xE9             ~ read one
+end
+ward 0x21                        ~ an interrupt handler (declared, not fired)
+  hush
+end
+```
+
+The interpreter simulates the RAM and the ports, so bare scrolls run (and
+can be tested) anywhere. `peek inscribe whisper listen port` are ordinary
+names outside a rite.
+
+Scrolls can also read and write files and talk to their caller:
+
+| word                     | does                                              |
+| ------------------------ | ------------------------------------------------- |
+| `unseal <path>`          | the file's text, as a glyph                       |
+| `engrave <glyph> to <path>`   | write a file (`onto` appends)                |
+| `bones <glyph>` / `flesh <strand>` | glyph <-> strand of UTF-8 bytes         |
+| `heed`                   | the words after the scroll on the command line    |
+| `depart [code]`          | stop, with an exit status                         |
+
+```
+glo run compiler.glo --target linux in.glo    ~ heed = weave "--target", ...
+```
+
+---
+
 ## the machine speaks when it does not understand
 
 Glossolalia never says `SyntaxError: unexpected token`. It speaks back in its

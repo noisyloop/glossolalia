@@ -1,0 +1,44 @@
+~ tongue: bare
+~ globals, locals, shadowing, evaluation order, sigils
+let calls be 0
+incant bump takes n
+  add calls by 1
+  echo n
+end
+incant show takes a, b, c
+  speak a
+  speak b
+  speak c
+end
+call show with (call bump with 1), (call bump with 2), (call bump with 3)
+speak calls
+
+let x be 1
+incant shadow
+  let x be 2
+  speak x
+  set x to 3
+  speak x
+end
+call shadow
+speak x
+
+incant poke_global
+  set x to 100
+end
+call poke_global
+speak x
+
+sigil root be 432
+speak root
+incant read_root
+  echo root
+end
+speak call read_root
+speak call read_root add by 1
+
+incant sub takes a, b
+  echo a subtract by b
+end
+speak call sub with 10, 3
+speak call sub with (call sub with 100, 30), 5

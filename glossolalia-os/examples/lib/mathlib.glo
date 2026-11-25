@@ -1,0 +1,6 @@
+~ tongue: bare
+~ a small library, pulled in with invoke
+let lib_loaded be 1
+incant square takes n
+  echo n scale by n
+end

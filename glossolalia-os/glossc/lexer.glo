@@ -1,0 +1,329 @@
+~ lexer.glo — turning bytes into tokens.
+~
+~ glossc is written in the full tongue, and (milestone 7) compiles itself, so
+~ this file sticks to a small, plain subset of the language: pulses, glyphs,
+~ strands, incantations, loops. No tones, no rituals.
+~
+~ The lexer is a state machine over a few global names. The parser asks for
+~ "the next token" and finds it in tk (type), tv (value) and tl (line):
+~
+~     tk   "NAME" "NUMBER" "STRING" "LPAREN" "RPAREN" "COMMA" "NEWLINE" "EOF",
+~          or, for a keyword, the keyword itself ("speak", "end", ...)
+~     tv   the word / the number / the text of a glyph
+~     tl   the line the token sits on
+~
+~ A newline ends a statement, so NEWLINE is a real token; blank lines and
+~ comment-only lines produce none (same rule as the interpreter's lexer).
+
+~ ── lexer state ──────────────────────────────────────────────────────
+let src be weave
+let src_len be 0
+let pos be 0
+let line be 1
+let line_content be 0
+let tk be "EOF"
+let tv be void
+let tl be 1
+
+~ A scroll is "full" unless a comment before its first word says
+~ "~ tongue: bare". toks_seen tells us whether we are still before that word.
+let scroll_tongue be "full"
+let toks_seen be 0
+
+let keywords be weave "speak", "hush", "burn", "rise", "fall", "drift", "breathe", "silence", "open", "close", "send", "sync", "void", "let", "be", "set", "to", "by", "with", "takes", "for", "add", "subtract", "scale", "modulate", "if", "else", "repeat", "until", "incant", "voice", "invoke", "call", "end", "echo", "ritual", "is", "not", "above", "below", "and", "or", "tone", "pulse", "glyph", "flicker", "weave", "unweave", "count", "at", "in", "fracture", "converge", "remember", "forget", "as", "sigil", "ascend", "descend", "chant", "channel", "voices", "rite", "ward", "unseal", "engrave", "onto", "bones", "flesh", "heed", "depart"
+
+~ ── errors ───────────────────────────────────────────────────────────
+~ The machine never says "syntax error". It speaks in its own voice and
+~ leaves with status 1.
+incant die_at takes msg, ln
+  speak msg add by " on line " add by ln
+  depart 1
+end
+
+~ ── character classes (bytes, as numbers) ────────────────────────────
+incant is_digit takes c
+  echo c above 47 and c below 58
+end
+
+incant is_hex takes c
+  echo (c above 47 and c below 58) or (c above 64 and c below 71) or (c above 96 and c below 103)
+end
+
+incant is_name_start takes c
+  echo (c above 96 and c below 123) or (c above 64 and c below 91) or c is 95
+end
+
+incant is_name_part takes c
+  echo (call is_name_start with c) or (call is_digit with c)
+end
+
+~ hex digit value of a byte
+incant hex_value takes c
+  if c below 58
+    echo c subtract by 48
+  end
+  if c below 71
+    echo c subtract by 55
+  end
+  echo c subtract by 87
+end
+
+incant is_keyword takes w
+  repeat k in keywords
+    if k is w
+      echo 1
+    end
+  end
+  echo 0
+end
+
+~ does glyph a begin with glyph p?
+incant starts_with takes a, p
+  if count a below count p
+    echo 0
+  end
+  let i be 0
+  until i is count p
+    if (a at i) not (p at i)
+      echo 0
+    end
+    rise i
+  end
+  echo 1
+end
+
+~ ── skipping what carries no meaning ─────────────────────────────────
+~ Blanks, comments, and newlines on lines that said nothing. If this is
+~ the first comment of the scroll, it may declare the tongue.
+incant skip_blank
+  let more be 1
+  until more is 0
+    set more to 0
+    if pos below src_len
+      let c be src at pos
+      if c is 32 or c is 9 or c is 13
+        rise pos
+        set more to 1
+      else
+        if c is 10 and line_content is 0
+          rise pos
+          rise line
+          set more to 1
+        end
+        if c is 126
+          ~ a comment: runs to the end of the line. Only a comment that
+          ~ comes before the scroll's first word can declare its tongue, so
+          ~ only that one is read into a glyph.
+          rise pos
+          let text be weave
+          until pos is src_len or (src at pos) is 10
+            if toks_seen is 0
+              set text to text add by (weave (src at pos))
+            end
+            rise pos
+          end
+          if toks_seen is 0
+            call note_marker with (flesh text)
+          end
+          set more to 1
+        end
+      end
+    end
+  end
+end
+
+~ "~ tongue: bare" before the first word declares the scroll bare.
+incant note_marker takes text
+  let raw be bones text
+  let i be 0
+  until i is count raw or (raw at i) not 32
+    rise i
+  end
+  ~ i now points past the leading blanks
+  let rest be weave
+  let j be i
+  until j is count raw
+    set rest to rest add by (weave (raw at j))
+    rise j
+  end
+  let word be flesh rest
+  if call starts_with with word, "tongue: bare"
+    set scroll_tongue to "bare"
+  end
+  if call starts_with with word, "tongue: full"
+    set scroll_tongue to "full"
+  end
+end
+
+~ ── the next token ───────────────────────────────────────────────────
+incant next_token
+  call skip_blank
+  set tl to line
+  if pos is src_len
+    if line_content is 1
+      set line_content to 0
+      set tk to "NEWLINE"
+    else
+      set tk to "EOF"
+    end
+    void
+  end
+  let c be src at pos
+  if c is 10
+    set tk to "NEWLINE"
+    set tv to "newline"
+    rise pos
+    rise line
+    set line_content to 0
+    void
+  end
+  set line_content to 1
+  set toks_seen to 1
+
+  ~ a glyph: "text" with \n \t \" \\ escapes
+  if c is 34
+    let start_line be line
+    rise pos
+    let buf be weave
+    until pos is src_len or (src at pos) is 34
+      let b be src at pos
+      if b is 10
+        call die_at with "a glyph was opened but never closed", start_line
+      end
+      if b is 92 and pos add by 1 below src_len
+        rise pos
+        let e be src at pos
+        if e is 110
+          set b to 10
+        else
+          if e is 116
+            set b to 9
+          else
+            set b to e
+          end
+        end
+      end
+      set buf to buf add by (weave b)
+      rise pos
+    end
+    if pos is src_len
+      call die_at with "a glyph was opened but never closed", start_line
+    end
+    rise pos
+    set tk to "STRING"
+    set tv to flesh buf
+    void
+  end
+
+  ~ a number: decimal, hex (0xB8000), or negative (-3)
+  let neg be 0
+  let digits_at be pos
+  if c is 45 and pos add by 1 below src_len
+    let nxt be src at (pos add by 1)
+    if call is_digit with nxt
+      set neg to 1
+      set digits_at to pos add by 1
+    end
+  end
+  if (call is_digit with c) or neg is 1
+    set pos to digits_at
+    let value be 0
+    let first be src at pos
+    let after be pos add by 2
+    if first is 48 and after below src_len and (src at (pos add by 1)) is 120 and (call is_hex with (src at after))
+      set pos to after
+      until pos is src_len or not (call is_hex with (src at pos))
+        set value to value scale by 16 add by (call hex_value with (src at pos))
+        rise pos
+      end
+    else
+      until pos is src_len or not (call is_digit with (src at pos))
+        set value to value scale by 10 add by ((src at pos) subtract by 48)
+        rise pos
+      end
+      if pos below src_len and (src at pos) is 46
+        call die_at with "the compiler does not yet speak tones (decimal numbers)", line
+      end
+    end
+    if neg is 1
+      set value to 0 subtract by value
+    end
+    set tk to "NUMBER"
+    set tv to value
+    void
+  end
+
+  if c is 40
+    set tk to "LPAREN"
+    set tv to "("
+    rise pos
+    void
+  end
+  if c is 41
+    set tk to "RPAREN"
+    set tv to ")"
+    rise pos
+    void
+  end
+  if c is 44
+    set tk to "COMMA"
+    set tv to ","
+    rise pos
+    void
+  end
+
+  ~ a word: a keyword (part of the tongue) or a name
+  if call is_name_start with c
+    let letters be weave
+    until pos is src_len or not (call is_name_part with (src at pos))
+      set letters to letters add by (weave (src at pos))
+      rise pos
+    end
+    let word be flesh letters
+    set tv to word
+    if call is_keyword with word
+      set tk to word
+    else
+      set tk to "NAME"
+    end
+    void
+  end
+
+  call die_at with ("the machine did not understand \"" add by (flesh (weave c)) add by "\""), line
+end
+
+~ Look one token ahead without consuming anything: save the lexer, step,
+~ read the type, put everything back.
+incant peek_token
+  let s_pos be pos
+  let s_line be line
+  let s_content be line_content
+  let s_tk be tk
+  let s_tv be tv
+  let s_tl be tl
+  let s_seen be toks_seen
+  call next_token
+  let ahead be tk
+  set pos to s_pos
+  set line to s_line
+  set line_content to s_content
+  set tk to s_tk
+  set tv to s_tv
+  set tl to s_tl
+  set toks_seen to s_seen
+  echo ahead
+end
+
+~ ── loading a scroll's text ──────────────────────────────────────────
+~ Point the lexer at new text and read its first token (which also settles
+~ the scroll's tongue, because the marker comment comes before it).
+incant lex_begin takes text
+  set src to bones text
+  set src_len to count src
+  set pos to 0
+  set line to 1
+  set line_content to 0
+  set toks_seen to 0
+  set scroll_tongue to "full"
+  call next_token
+end

@@ -1,0 +1,36 @@
+~ tongue: bare
+~ kernel/test_irq.glo — milestone 3's self-test.
+~ Brings up the interrupt system, then checks the timer, the keyboard's
+~ timeout, and finally that a CPU exception reaches its ward.
+invoke "console"
+invoke "interrupts"
+
+call console_init
+call interrupts_init
+speak "interrupts on"
+
+let before be ticks
+drift 100
+let elapsed be ticks subtract by before
+if elapsed above 89 and elapsed below 2000
+  speak "timer ok"
+else
+  speak "timer bad"
+  speak elapsed
+  depart 1
+end
+
+~ nobody is typing: the keyboard read must give up and say so (-1)
+let key be call kb_getc_timeout with 50
+if key is -1
+  speak "keyboard timeout ok"
+else
+  speak "keyboard: a key from nowhere"
+  depart 2
+end
+
+speak "about to divide by zero"
+let zero be 0
+speak 1 modulate by zero
+speak "not reached"
+depart 3

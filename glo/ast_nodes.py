@@ -255,3 +255,76 @@ class Invoke:
 @dataclass
 class Program:
     body: List[Any] = field(default_factory=list)
+
+
+# ── Bare tongue (SPEC-BARE.md) ───────────────────────────────────────
+
+@dataclass
+class Peek:
+    """peek [p8|p16|p32] <address> — read memory (expression)."""
+    address: Any
+    bits: int = 0          # 0 = no size word: a plain, signed 32-bit pulse
+    line: int = 0
+
+
+@dataclass
+class Listen:
+    """listen [p8|p16|p32] port <port> — read an I/O port (expression)."""
+    port: Any
+    bits: int = 8
+    line: int = 0
+
+
+@dataclass
+class Inscribe:
+    """inscribe <value> at <address> — write memory."""
+    value: Any
+    address: Any
+    line: int = 0
+
+
+@dataclass
+class Whisper:
+    """whisper <value> to port <port> — write an I/O port."""
+    value: Any
+    port: Any
+    line: int = 0
+
+
+@dataclass
+class Rite:
+    """rite ... end — raw code; the hardware words are legal only here."""
+    body: List[Any] = field(default_factory=list)
+    line: int = 0
+
+
+@dataclass
+class Ward:
+    """ward <vector> ... end — an interrupt handler."""
+    vector: Any
+    body: List[Any] = field(default_factory=list)
+    line: int = 0
+
+
+# ── Scrolls on disk, the command line, leaving ───────────────────────
+
+@dataclass
+class Engrave:
+    """engrave <glyph> to <path> (write) / onto <path> (append)."""
+    value: Any
+    path: Any
+    append: bool = False
+    line: int = 0
+
+
+@dataclass
+class Depart:
+    """depart [code] — leave with an exit code."""
+    code: Any = None
+    line: int = 0
+
+
+@dataclass
+class Heed:
+    """heed — the command-line words, as a strand of glyphs."""
+    line: int = 0

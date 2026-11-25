@@ -13,7 +13,7 @@ import sys
 
 from . import __version__
 from .errors import GlossolaliaError
-from .evaluator import Interpreter
+from .evaluator import Departure, Interpreter
 from .parser import parse
 
 
@@ -22,9 +22,12 @@ def _print_error(exc):
 
 
 def cmd_run(args):
-    interp = Interpreter(quiet=args.quiet)
+    interp = Interpreter(quiet=args.quiet, args=args.words)
     try:
         interp.run_file(args.scroll)
+    except Departure as leaving:
+        sys.stdout.flush()
+        return leaving.code
     except GlossolaliaError as exc:
         _print_error(exc)
         return 1
@@ -170,6 +173,10 @@ def build_parser():
 
     p_run = sub.add_parser("run", help="execute a scroll")
     p_run.add_argument("scroll")
+    # Everything after the scroll is the scroll's own business: `heed`
+    # hands it back as a strand of glyphs (flags included).
+    p_run.add_argument("words", nargs=argparse.REMAINDER,
+                       help="words handed to the scroll (see `heed`)")
     p_run.set_defaults(func=cmd_run)
 
     p_check = sub.add_parser("check", help="validate syntax without running")

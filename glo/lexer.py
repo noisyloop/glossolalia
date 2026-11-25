@@ -32,6 +32,13 @@ KEYWORDS = {
     "remember", "forget", "as", "sigil",
     # tone-craft & utterance
     "ascend", "descend", "chant",
+    # bare tongue (SPEC-BARE.md): rites and interrupt wards. The hardware
+    # words (inscribe peek whisper listen port) are NOT keywords: they are
+    # recognised by the parser only inside a rite, so scrolls that already
+    # use them as names (an incantation called `peek`) keep working.
+    "rite", "ward",
+    # scrolls on disk, bytes, the command line, leaving
+    "unseal", "engrave", "onto", "bones", "flesh", "heed", "depart",
     # words that read as keywords in place
     "channel", "voices",
 }
@@ -139,6 +146,17 @@ def tokenize(source):
                 )
             i += 1  # closing quote
             push("STRING", "".join(chars))
+            continue
+
+        # Hex pulse — 0xB8000. Hardware addresses are written in hex, so the
+        # lexer accepts "0x" followed by hex digits as a whole-number pulse.
+        if (ch == "0" and i + 2 < n and source[i + 1] == "x"
+                and source[i + 2] in "0123456789abcdefABCDEF"):
+            start = i
+            i += 2
+            while i < n and source[i] in "0123456789abcdefABCDEF":
+                i += 1
+            push("NUMBER", int(source[start:i], 16))
             continue
 
         # Number — pulse (int) or tone (float). Allows leading minus.

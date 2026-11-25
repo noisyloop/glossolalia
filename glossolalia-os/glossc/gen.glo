@@ -1,0 +1,873 @@
+~ gen.glo — from syntax tree to NASM: the symbol tables and the bare tongue.
+~
+~ The design is a plain stack machine, chosen because it is the easiest thing
+~ that can possibly work and easy to read:
+~
+~   * every expression leaves its value in EAX;
+~   * a binary operator evaluates its left side, PUSHes it, evaluates its
+~     right side, then POPs the left back into EAX (right is moved to EBX);
+~   * locals live on the stack at [ebp-4*k], parameters above the return
+~     address at [ebp+8+4*j], globals are 32-bit cells named v_<name>.
+~
+~ Arguments are pushed left to right (so they are evaluated in source order);
+~ the callee knows how many there are, the caller pops them. Result in EAX.
+~ (SPEC-BARE.md §6.1.)
+
+~ ── output ───────────────────────────────────────────────────────────
+let out_path be ""
+let target be "linux"
+let label_n be 0
+let text_n be 0
+let fn_id be 0
+
+incant emit takes text
+  engrave text add by "\n" onto out_path
+end
+
+incant new_label
+  rise label_n
+  echo "L" add by label_n
+end
+
+~ a static text in the data section; returns its label
+incant text_label takes text
+  rise text_n
+  let lbl be "T" add by text_n
+  let raw be bones text
+  call emit with "section .data"
+  call emit with lbl add by ":"
+  let i be 0
+  let row be ""
+  let in_row be 0
+  until i is count raw
+    if in_row is 0
+      set row to "  db " add by (raw at i)
+    else
+      set row to row add by "," add by (raw at i)
+    end
+    rise in_row
+    rise i
+    if in_row is 16 or i is count raw
+      call emit with row
+      set in_row to 0
+    end
+  end
+  call emit with "section .text"
+  echo lbl
+end
+
+~ ── symbol tables ────────────────────────────────────────────────────
+~ Parallel strands: entry i of each describes one thing.
+let gl_names be weave
+let gl_types be weave
+let gl_tongues be weave
+let gl_consts be weave
+let fn_names be weave
+let fn_arity be weave
+let fn_tongues be weave
+let ward_vectors be weave
+let ext_names be weave
+let ext_arity be weave
+let lc_names be weave
+let lc_locs be weave
+let lc_types be weave
+let lc_next be 0
+let lc_max be 0
+let cur_tongue be "full"
+let in_main be 0
+
+let int_names be weave "shl", "shr", "sar", "band", "bor", "bxor", "udiv", "umod", "sdiv", "say", "text_addr", "text_len", "ward_addr"
+let int_arity be weave 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1, 1, 1
+
+incant index_of takes lst, x
+  let i be 0
+  until i is count lst
+    if (lst at i) is x
+      echo i
+    end
+    rise i
+  end
+  echo -1
+end
+
+incant find_global takes name
+  echo call index_of with gl_names, name
+end
+
+incant find_fn takes name
+  echo call index_of with fn_names, name
+end
+
+~ the newest local of that name (a later let shadows an earlier one)
+incant find_local takes name
+  let i be count lc_names
+  until i is 0
+    fall i
+    if (lc_names at i) is name
+      echo i
+    end
+  end
+  echo -1
+end
+
+incant add_global takes name, ty, tongue, const
+  set gl_names to gl_names add by (weave name)
+  set gl_types to gl_types add by (weave ty)
+  set gl_tongues to gl_tongues add by (weave tongue)
+  set gl_consts to gl_consts add by (weave const)
+end
+
+~ a fresh stack slot for a hidden temporary; returns where it lives
+incant new_temp
+  rise lc_next
+  if lc_next above lc_max
+    set lc_max to lc_next
+  end
+  echo "[ebp-" add by (lc_next scale by 4) add by "]"
+end
+
+incant declare_local takes name, ty
+  let at_old be call find_local with name
+  if at_old above -1
+    ~ already a local: same slot, maybe a new type
+    let loc be lc_locs at at_old
+    set lc_names to lc_names add by (weave name)
+    set lc_locs to lc_locs add by (weave loc)
+    set lc_types to lc_types add by (weave ty)
+    echo loc
+  end
+  let slot be call new_temp
+  set lc_names to lc_names add by (weave name)
+  set lc_locs to lc_locs add by (weave slot)
+  set lc_types to lc_types add by (weave ty)
+  echo slot
+end
+
+incant never_heard takes name, ln
+  call die_at with ("the machine has never heard the name \"" add by name add by "\""), ln
+end
+
+~ where a name lives, as an assembler operand
+incant lookup_loc takes name, ln
+  let i be call find_local with name
+  if i above -1
+    echo lc_locs at i
+  end
+  let g be call find_global with name
+  if g above -1
+    echo "[v_" add by name add by "]"
+  end
+  call never_heard with name, ln
+end
+
+incant lookup_type takes name, ln
+  let i be call find_local with name
+  if i above -1
+    echo lc_types at i
+  end
+  let g be call find_global with name
+  if g above -1
+    echo gl_types at g
+  end
+  call never_heard with name, ln
+end
+
+incant check_not_sigil takes name, ln
+  if (call find_local with name) is -1
+    let g be call find_global with name
+    if g above -1
+      if (gl_consts at g) is 1
+        call die_at with ("the sigil \"" add by name add by "\" is fixed and cannot be changed"), ln
+      end
+    end
+  end
+end
+
+~ ── the bare tongue's types ──────────────────────────────────────────
+~ "pulse" (plain, signed 32), "p8", "p16", "p32", "flicker"
+incant bare_type takes e
+  let k be e at 0
+  if k is "un"
+    let op be e at 1
+    if op is "p8" or op is "p16" or op is "p32"
+      echo op
+    end
+    if op is "not" or op is "flicker"
+      echo "flicker"
+    end
+    echo "pulse"
+  end
+  if k is "peek"
+    if (e at 1) is 0
+      echo "pulse"
+    end
+    echo "p" add by (e at 1)
+  end
+  if k is "listen"
+    echo "p" add by (e at 1)
+  end
+  if k is "name"
+    echo call lookup_type with (e at 1), (e at 2)
+  end
+  if k is "bin"
+    let op be e at 1
+    if op is "is" or op is "not" or op is "above" or op is "below" or op is "and" or op is "or"
+      echo "flicker"
+    end
+  end
+  echo "pulse"
+end
+
+~ keep only the low bits when a sized name is stored into
+incant wrap_to takes ty
+  if ty is "p8"
+    call emit with "  movzx eax, al"
+  end
+  if ty is "p16"
+    call emit with "  movzx eax, ax"
+  end
+end
+
+~ ── refusals in the machine's voice ──────────────────────────────────
+incant forbid_bare takes what, ln
+  call die_at with ("the bare tongue has no heap, so no " add by what), ln
+end
+
+incant not_yet_spoken takes what, ln
+  call die_at with ("the compiler does not yet speak \"" add by what add by "\""), ln
+end
+
+~ ── expressions ──────────────────────────────────────────────────────
+~ Leaves the value in EAX.
+incant bare_expr takes e
+  let k be e at 0
+  if k is "num"
+    call emit with "  mov eax, " add by (e at 1)
+    void
+  end
+  if k is "name"
+    call emit with "  mov eax, " add by (call lookup_loc with (e at 1), (e at 2))
+    void
+  end
+  if k is "call"
+    call bare_call with (e at 1), (e at 2), (e at 3)
+    void
+  end
+  if k is "un"
+    call bare_unary with e
+    void
+  end
+  if k is "bin"
+    call bare_binary with e
+    void
+  end
+  if k is "peek"
+    call bare_expr with (e at 2)
+    call emit with "  mov ebx, eax"
+    if (e at 1) is 8
+      call emit with "  movzx eax, byte [ebx]"
+    else
+      if (e at 1) is 16
+        call emit with "  movzx eax, word [ebx]"
+      else
+        call emit with "  mov eax, [ebx]"
+      end
+    end
+    void
+  end
+  if k is "listen"
+    call bare_expr with (e at 2)
+    call emit with "  movzx edx, ax"
+    if target is "linux"
+      ~ no real ports for a normal process: a port is a latch (SPEC-BARE §3.3)
+      call emit with "  mov eax, [t_ports+edx*4]"
+    else
+      if (e at 1) is 8
+        call emit with "  in al, dx"
+      else
+        if (e at 1) is 16
+          call emit with "  in ax, dx"
+        else
+          call emit with "  in eax, dx"
+        end
+      end
+    end
+    if (e at 1) is 8
+      call emit with "  movzx eax, al"
+    end
+    if (e at 1) is 16
+      call emit with "  movzx eax, ax"
+    end
+    void
+  end
+  if k is "str"
+    call die_at with "the bare tongue holds no glyphs; only speak and say may name one", e at 2
+  end
+  if k is "void"
+    call forbid_bare with "void", e at 1
+  end
+  if k is "strand"
+    call forbid_bare with "strands", e at 2
+  end
+  if k is "heed"
+    call forbid_bare with "heed", e at 1
+  end
+  call forbid_bare with "such a word", e at (count e subtract by 1)
+end
+
+incant bare_unary takes e
+  let op be e at 1
+  let ln be e at 3
+  if op is "p8" or op is "p16" or op is "p32" or op is "pulse" or op is "not" or op is "flicker"
+    call bare_expr with (e at 2)
+    if op is "p8"
+      call emit with "  movzx eax, al"
+    end
+    if op is "p16"
+      call emit with "  movzx eax, ax"
+    end
+    if op is "not"
+      call emit with "  test eax, eax"
+      call emit with "  sete al"
+      call emit with "  movzx eax, al"
+    end
+    if op is "flicker"
+      call emit with "  test eax, eax"
+      call emit with "  setne al"
+      call emit with "  movzx eax, al"
+    end
+    void
+  end
+  if op is "tone" or op is "ascend" or op is "descend"
+    call die_at with "the compiler does not yet speak tones (decimal numbers)", ln
+  end
+  call forbid_bare with "\"" add by op add by "\"", ln
+end
+
+incant bare_binary takes e
+  let op be e at 1
+  let ln be e at 4
+  if op is "and"
+    let lf be call new_label
+    let le be call new_label
+    call bare_expr with (e at 2)
+    call emit with "  test eax, eax"
+    call emit with "  jz " add by lf
+    call bare_expr with (e at 3)
+    call emit with "  test eax, eax"
+    call emit with "  jz " add by lf
+    call emit with "  mov eax, 1"
+    call emit with "  jmp " add by le
+    call emit with lf add by ":"
+    call emit with "  xor eax, eax"
+    call emit with le add by ":"
+    void
+  end
+  if op is "or"
+    let lt be call new_label
+    let le be call new_label
+    call bare_expr with (e at 2)
+    call emit with "  test eax, eax"
+    call emit with "  jnz " add by lt
+    call bare_expr with (e at 3)
+    call emit with "  test eax, eax"
+    call emit with "  jnz " add by lt
+    call emit with "  xor eax, eax"
+    call emit with "  jmp " add by le
+    call emit with lt add by ":"
+    call emit with "  mov eax, 1"
+    call emit with le add by ":"
+    void
+  end
+  if op is "at" or op is "fracture" or op is "converge"
+    call forbid_bare with "\"" add by op add by "\"", ln
+  end
+  let unsigned be ((call bare_type with (e at 2)) is "p32") or ((call bare_type with (e at 3)) is "p32")
+  call bare_expr with (e at 2)
+  call emit with "  push eax"
+  call bare_expr with (e at 3)
+  call emit with "  mov ebx, eax"
+  call emit with "  pop eax"
+  call arith_op with op, unsigned
+end
+
+~ EAX = EAX <op> EBX
+incant arith_op takes op, unsigned
+  if op is "add"
+    call emit with "  add eax, ebx"
+    void
+  end
+  if op is "subtract"
+    call emit with "  sub eax, ebx"
+    void
+  end
+  if op is "scale"
+    call emit with "  imul eax, ebx"
+    void
+  end
+  if op is "modulate"
+    ~ the remainder: idiv/div leave it in EDX
+    if unsigned
+      call emit with "  xor edx, edx"
+      call emit with "  div ebx"
+    else
+      call emit with "  cdq"
+      call emit with "  idiv ebx"
+    end
+    call emit with "  mov eax, edx"
+    void
+  end
+  call emit with "  cmp eax, ebx"
+  if op is "is"
+    call emit with "  sete al"
+  end
+  if op is "not"
+    call emit with "  setne al"
+  end
+  if op is "above"
+    if unsigned
+      call emit with "  seta al"
+    else
+      call emit with "  setg al"
+    end
+  end
+  if op is "below"
+    if unsigned
+      call emit with "  setb al"
+    else
+      call emit with "  setl al"
+    end
+  end
+  call emit with "  movzx eax, al"
+end
+
+~ ── calls ────────────────────────────────────────────────────────────
+~ Machine words (SPEC-BARE.md §7) are compiled in line, unless the program
+~ defined an incantation of the same name (then the program's wins).
+incant bare_call takes name, args, ln
+  let f be call find_fn with name
+  if f above -1
+    if (fn_arity at f) not (count args)
+      call die_at with ("the incantation \"" add by name add by "\" takes " add by (fn_arity at f) add by " but was given " add by (count args)), ln
+    end
+    call push_args with args
+    call emit with "  call g_" add by name
+    if count args above 0
+      call emit with "  add esp, " add by (4 scale by count args)
+    end
+    void
+  end
+  let n be call index_of with int_names, name
+  if n above -1
+    if (int_arity at n) not (count args)
+      call die_at with ("the machine word \"" add by name add by "\" takes " add by (int_arity at n) add by " but was given " add by (count args)), ln
+    end
+    call intrinsic with name, args, ln
+    void
+  end
+  let x be call index_of with ext_names, name
+  if x above -1
+    if (ext_arity at x) not (count args)
+      call die_at with ("the incantation \"" add by name add by "\" takes " add by (ext_arity at x) add by " but was given " add by (count args)), ln
+    end
+    call push_args with args
+    call emit with "  call g_" add by name
+    if count args above 0
+      call emit with "  add esp, " add by (4 scale by count args)
+    end
+    void
+  end
+  call die_at with ("an incantation named \"" add by name add by "\" has not been spoken yet"), ln
+end
+
+incant push_args takes args
+  repeat a in args
+    call bare_expr with a
+    call emit with "  push eax"
+  end
+end
+
+incant literal_text takes arg, name, ln
+  if (arg at 0) not "str"
+    call die_at with ("\"" add by name add by "\" needs a glyph written out in full"), ln
+  end
+  echo arg at 1
+end
+
+incant intrinsic takes name, args, ln
+  if name is "say"
+    let text be call literal_text with (args at 0), name, ln
+    let lbl be call text_label with text
+    call emit with "  push " add by lbl
+    call emit with "  push " add by (count (bones text))
+    call emit with "  call g_rt_say"
+    call emit with "  add esp, 8"
+    void
+  end
+  if name is "text_addr"
+    let text be call literal_text with (args at 0), name, ln
+    call emit with "  mov eax, " add by (call text_label with text)
+    void
+  end
+  if name is "text_len"
+    let text be call literal_text with (args at 0), name, ln
+    call emit with "  mov eax, " add by (count (bones text))
+    void
+  end
+  if name is "ward_addr"
+    if ((args at 0) at 0) not "num"
+      call die_at with "ward_addr needs the vector written as a number", ln
+    end
+    let v be (args at 0) at 1
+    if (call index_of with ward_vectors, v) is -1
+      call die_at with ("no ward was spoken for vector " add by v), ln
+    end
+    call emit with "  mov eax, isr_" add by v
+    void
+  end
+  ~ the two-operand machine words: a in EAX, b in ECX
+  call bare_expr with (args at 0)
+  call emit with "  push eax"
+  call bare_expr with (args at 1)
+  call emit with "  mov ecx, eax"
+  call emit with "  pop eax"
+  if name is "shl"
+    call emit with "  shl eax, cl"
+  end
+  if name is "shr"
+    call emit with "  shr eax, cl"
+  end
+  if name is "sar"
+    call emit with "  sar eax, cl"
+  end
+  if name is "band"
+    call emit with "  and eax, ecx"
+  end
+  if name is "bor"
+    call emit with "  or eax, ecx"
+  end
+  if name is "bxor"
+    call emit with "  xor eax, ecx"
+  end
+  if name is "udiv" or name is "umod"
+    call emit with "  xor edx, edx"
+    call emit with "  div ecx"
+    if name is "umod"
+      call emit with "  mov eax, edx"
+    end
+  end
+  if name is "sdiv"
+    call emit with "  cdq"
+    call emit with "  idiv ecx"
+  end
+end
+
+~ ── statements ───────────────────────────────────────────────────────
+incant bare_block takes body
+  repeat s in body
+    call bare_stmt with s
+  end
+end
+
+~ store EAX into a name, wrapping if it was born sized
+incant store_var takes name, ln
+  call check_not_sigil with name, ln
+  call wrap_to with (call lookup_type with name, ln)
+  call emit with "  mov " add by (call lookup_loc with name, ln) add by ", eax"
+end
+
+incant bare_stmt takes s
+  let k be s at 0
+  if k is "hush"
+    void
+  end
+  if k is "speak"
+    let arg be s at 1
+    if (arg at 0) is "str"
+      let lbl be call text_label with (arg at 1)
+      call emit with "  push " add by lbl
+      call emit with "  push " add by (count (bones (arg at 1)))
+      call emit with "  call g_rt_say"
+      call emit with "  add esp, 8"
+      call emit with "  push 10"
+      call emit with "  call g_rt_putc"
+      call emit with "  add esp, 4"
+      void
+    end
+    let ty be call bare_type with arg
+    call bare_expr with arg
+    call emit with "  push eax"
+    if ty is "flicker"
+      call emit with "  push 2"
+    else
+      if ty is "pulse"
+        call emit with "  push 0"
+      else
+        call emit with "  push 1"
+      end
+    end
+    call emit with "  call g_rt_speakn"
+    call emit with "  add esp, 8"
+    void
+  end
+  if k is "let" or k is "sigil"
+    let ty be call bare_type with (s at 2)
+    call bare_expr with (s at 2)
+    if in_main is 1
+      ~ at the top of a scroll a let is a global (collected earlier)
+      let g be call find_global with (s at 1)
+      if g is -1
+        call add_global with (s at 1), ty, cur_tongue, 0
+      end
+      call emit with "  mov [v_" add by (s at 1) add by "], eax"
+    else
+      let loc be call declare_local with (s at 1), ty
+      call emit with "  mov " add by loc add by ", eax"
+    end
+    void
+  end
+  if k is "set"
+    call bare_expr with (s at 2)
+    call store_var with (s at 1), (s at 3)
+    void
+  end
+  if k is "step" or k is "mut"
+    ~ step: name, dir, amount, line     mut: op, name, amount, line
+    let name be s at 1
+    let amount be s at 3
+    let op be s at 2
+    let ln be s at 4
+    if k is "mut"
+      set name to s at 2
+      set op to s at 1
+      set amount to s at 3
+      set ln to s at 4
+    else
+      set op to "add"
+      if (s at 2) is -1
+        set op to "subtract"
+      end
+    end
+    let unsigned be (call lookup_type with name, ln) is "p32"
+    if amount is void
+      call emit with "  mov eax, 1"
+    else
+      call bare_expr with amount
+    end
+    call emit with "  mov ebx, eax"
+    call emit with "  mov eax, " add by (call lookup_loc with name, ln)
+    call arith_op with op, unsigned
+    call store_var with name, ln
+    void
+  end
+  if k is "if"
+    let lelse be call new_label
+    let lend be call new_label
+    call bare_expr with (s at 1)
+    call emit with "  test eax, eax"
+    call emit with "  jz " add by lelse
+    call bare_block with (s at 2)
+    call emit with "  jmp " add by lend
+    call emit with lelse add by ":"
+    call bare_block with (s at 3)
+    call emit with lend add by ":"
+    void
+  end
+  if k is "repeat"
+    ~ the count is worked out once, kept in a hidden slot, and counted down
+    let ltop be call new_label
+    let lend be call new_label
+    let slot be call new_temp
+    call bare_expr with (s at 1)
+    call emit with "  mov " add by slot add by ", eax"
+    call emit with ltop add by ":"
+    call emit with "  cmp dword " add by slot add by ", 0"
+    call emit with "  jle " add by lend
+    call bare_block with (s at 2)
+    call emit with "  dec dword " add by slot
+    call emit with "  jmp " add by ltop
+    call emit with lend add by ":"
+    void
+  end
+  if k is "until"
+    let ltop be call new_label
+    let lend be call new_label
+    call emit with ltop add by ":"
+    call bare_expr with (s at 1)
+    call emit with "  test eax, eax"
+    call emit with "  jnz " add by lend
+    call bare_block with (s at 2)
+    call emit with "  jmp " add by ltop
+    call emit with lend add by ":"
+    void
+  end
+  if k is "callstmt"
+    call bare_call with (s at 1), (s at 2), (s at 3)
+    void
+  end
+  if k is "echo"
+    if (s at 1) is void
+      call emit with "  xor eax, eax"
+    else
+      call bare_expr with (s at 1)
+    end
+    call emit with "  jmp X" add by fn_id
+    void
+  end
+  if k is "rite"
+    call bare_block with (s at 1)
+    void
+  end
+  if k is "inscribe"
+    let ty be call bare_type with (s at 1)
+    call bare_expr with (s at 1)
+    call emit with "  push eax"
+    call bare_expr with (s at 2)
+    call emit with "  mov ebx, eax"
+    call emit with "  pop eax"
+    if ty is "p8"
+      call emit with "  mov [ebx], al"
+    else
+      if ty is "p16"
+        call emit with "  mov [ebx], ax"
+      else
+        call emit with "  mov [ebx], eax"
+      end
+    end
+    void
+  end
+  if k is "whisper"
+    let ty be call bare_type with (s at 1)
+    call bare_expr with (s at 1)
+    call emit with "  push eax"
+    call bare_expr with (s at 2)
+    call emit with "  movzx edx, ax"
+    call emit with "  pop eax"
+    if target is "linux"
+      call wrap_to with ty
+      call emit with "  mov [t_ports+edx*4], eax"
+    else
+      if ty is "p8"
+        call emit with "  out dx, al"
+      else
+        if ty is "p16"
+          call emit with "  out dx, ax"
+        else
+          call emit with "  out dx, eax"
+        end
+      end
+    end
+    void
+  end
+  if k is "burn"
+    ~ burn <hz> [for <ms>]: whole hertz and milliseconds in the compiled tongues.
+    ~ Without "for" the tone sounds until silence; with it, the tone is burned,
+    ~ the machine drifts for that long, then goes silent. The target decides how
+    ~ a tone is made: t_burn hz / t_silence (SPEC-BARE.md section 9).
+    call bare_expr with (s at 1)
+    call emit with "  push eax"
+    call emit with "  call g_t_burn"
+    call emit with "  add esp, 4"
+    if (s at 2) not void
+      call bare_expr with (s at 2)
+      call emit with "  push eax"
+      call emit with "  call g_t_drift"
+      call emit with "  add esp, 4"
+      call emit with "  call g_t_silence"
+    end
+    void
+  end
+  if k is "silence"
+    call emit with "  call g_t_silence"
+    void
+  end
+  if k is "drift"
+    ~ drift <ms>: whole milliseconds in the compiled tongues (SPEC-BARE.md section 9)
+    if (s at 1) is void
+      void
+    end
+    call bare_expr with (s at 1)
+    call emit with "  push eax"
+    call emit with "  call g_t_drift"
+    call emit with "  add esp, 4"
+    void
+  end
+  if k is "depart"
+    if (s at 1) is void
+      call emit with "  xor eax, eax"
+    else
+      call bare_expr with (s at 1)
+    end
+    call emit with "  push eax"
+    call emit with "  call g_rt_exit"
+    call emit with "  add esp, 4"
+    void
+  end
+  if k is "incant" or k is "ward"
+    call die_at with "an incantation must be spoken at the top of a scroll, or inside a rite", s at (count s subtract by 2)
+  end
+  if k is "splice"
+    call die_at with "invoke belongs at the top of a scroll", s at 3
+  end
+  call not_yet_spoken with k, s at (count s subtract by 1)
+end
+
+~ ── functions and wards ──────────────────────────────────────────────
+~ A function: prologue, body, epilogue. The frame size is not known until
+~ the body has been seen, so it is an assembler constant (F<id>) defined
+~ afterwards.
+incant begin_function takes label, params
+  rise fn_id
+  set lc_names to weave
+  set lc_locs to weave
+  set lc_types to weave
+  set lc_next to 0
+  set lc_max to 0
+  let n be count params
+  let j be 0
+  until j is n
+    set lc_names to lc_names add by (weave (params at j))
+    set lc_locs to lc_locs add by (weave ("[ebp+" add by (8 add by (4 scale by (n subtract by 1 subtract by j))) add by "]"))
+    set lc_types to lc_types add by (weave "pulse")
+    rise j
+  end
+  call emit with label add by ":"
+  call emit with "  push ebp"
+  call emit with "  mov ebp, esp"
+  call emit with "  sub esp, F" add by fn_id
+end
+
+incant end_function
+  call emit with "  xor eax, eax"
+  call emit with "X" add by fn_id add by ":"
+  call emit with "  mov esp, ebp"
+  call emit with "  pop ebp"
+  call emit with "  ret"
+  call emit with "F" add by fn_id add by " equ " add by (4 scale by lc_max)
+end
+
+incant gen_incant takes s
+  set cur_tongue to s at 5
+  call begin_function with ("g_" add by (s at 1)), (s at 2)
+  call bare_block with (s at 3)
+  call end_function
+end
+
+~ An interrupt handler. The stub saves every register, runs the body, puts
+~ everything back and returns with iretd. CPU exceptions that push an error
+~ code get it discarded first (SPEC-BARE.md §3.4).
+incant gen_ward takes s
+  let v be (s at 1) at 1
+  call begin_function with ("g_ward_" add by v), weave
+  call bare_block with (s at 2)
+  call end_function
+  call emit with "isr_" add by v add by ":"
+  call emit with "  pushad"
+  call emit with "  cld"
+  call emit with "  call g_ward_" add by v
+  call emit with "  popad"
+  if v is 8 or v is 10 or v is 11 or v is 12 or v is 13 or v is 14 or v is 17 or v is 21 or v is 29 or v is 30
+    call emit with "  add esp, 4"
+  end
+  call emit with "  iretd"
+end

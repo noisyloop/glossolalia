@@ -15,6 +15,7 @@ from .environment import Environment
 from .errors import RitualError
 from .osc import OSCBridge
 from .parser import parse
+from .pulses import SIZES, SizedPulse, plain
 
 
 class ReturnSignal(Exception):
@@ -22,6 +23,16 @@ class ReturnSignal(Exception):
 
     def __init__(self, value=None):
         self.value = value
+
+
+class Departure(Exception):
+    """``depart`` — the scroll leaves, carrying an exit code.
+
+    Not an error: the command line turns it into the process exit status.
+    """
+
+    def __init__(self, code=0):
+        self.code = code
 
 
 class Closure:
@@ -62,7 +73,7 @@ def is_truthy(value):
 
 class Interpreter:
     def __init__(self, audio=None, osc=None, quiet=False, time_scale=None,
-                 trace=False):
+                 trace=False, args=None):
         # The deep memory layer sits beneath globals: things the machine
         # is told to `remember` persist here, reachable from any scope.
         self.memory = Environment()
@@ -87,6 +98,13 @@ class Interpreter:
         self._voice_threads = []
         self._call_depth = 0
         self._voices_spawned = 0
+        # The simulated machine for the bare tongue: a sparse RAM (address ->
+        # byte), a latch per I/O port, and the interrupt wards that were
+        # declared. No interrupt ever fires here; real hardware does that.
+        self.ram = {}
+        self.ports = {}
+        self.wards = {}
+        self.args = [str(a) for a in (args or [])]
 
     # ── public entry points ──────────────────────────────────────
     def run_source(self, source, scroll_dir=None):
@@ -380,6 +398,89 @@ class Interpreter:
         finally:
             self._scroll_dirs.pop()
 
+    # ── bare tongue: memory, ports, rites, wards ─────────────────
+    @staticmethod
+    def _width_of(value):
+        """Bits a value occupies when written: its own size, else 32."""
+        return value.bits if isinstance(value, SizedPulse) else 32
+
+    def _whole(self, value, what, line):
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise RitualError(f"{what} must be a whole pulse", line)
+        return int(value)
+
+    def _exec_inscribe(self, node, env):
+        value = self.evaluate(node.value, env)
+        address = self._whole(self.evaluate(node.address, env), "an address",
+                              node.line)
+        bits = self._width_of(value)
+        value = self._whole(value, "what is inscribed", node.line)
+        for k in range(bits // 8):          # little-endian, like the CPU
+            self.ram[(address + k) & 0xFFFFFFFF] = (value >> (8 * k)) & 0xFF
+
+    def _eval_peek(self, node, env):
+        address = self._whole(self.evaluate(node.address, env), "an address",
+                              node.line)
+        bits = node.bits or 32
+        raw = 0
+        for k in range(bits // 8):
+            raw |= self.ram.get((address + k) & 0xFFFFFFFF, 0) << (8 * k)
+        if node.bits == 0:
+            # no size word: a plain pulse, signed 32-bit like a CPU register
+            return raw - (1 << 32) if raw & 0x80000000 else raw
+        return SizedPulse(raw, bits)
+
+    def _exec_whisper(self, node, env):
+        value = self.evaluate(node.value, env)
+        port = self._whole(self.evaluate(node.port, env), "a port", node.line)
+        bits = self._width_of(value)
+        self.ports[port & 0xFFFF] = (
+            self._whole(value, "what is whispered", node.line)
+            & ((1 << bits) - 1)
+        )
+
+    def _eval_listen(self, node, env):
+        port = self._whole(self.evaluate(node.port, env), "a port", node.line)
+        return SizedPulse(self.ports.get(port & 0xFFFF, 0), node.bits)
+
+    def _exec_rite(self, node, env):
+        # unlike a ritual, a rite opens no scope: the incantations and names
+        # it declares belong to the scroll around it
+        self.execute_block(node.body, env)
+
+    def _exec_ward(self, node, env):
+        vector = self._whole(self.evaluate(node.vector, env), "a vector",
+                             node.line)
+        self.wards[vector] = node
+
+    # ── scrolls on disk, the command line, leaving ───────────────
+    def _path(self, value, line):
+        if not isinstance(value, str) or value == "":
+            raise RitualError("a path must be a glyph naming a scroll", line)
+        return value
+
+    def _exec_engrave(self, node, env):
+        value = self.evaluate(node.value, env)
+        path = self._path(self.evaluate(node.path, env), node.line)
+        if not isinstance(value, str):
+            raise RitualError("only a glyph can be engraved", node.line)
+        try:
+            with open(path, "ab" if node.append else "wb") as fh:
+                fh.write(value.encode("utf-8"))
+        except OSError:
+            raise RitualError(f'the machine could not engrave "{path}"',
+                              node.line)
+
+    def _exec_depart(self, node, env):
+        code = 0
+        if node.code is not None:
+            code = self._whole(self.evaluate(node.code, env),
+                               "an exit code", node.line)
+        raise Departure(code & 0xFF)
+
+    def _eval_heed(self, node, env):
+        return list(self.args)
+
     # ── incantation calls ────────────────────────────────────────
     def invoke_incant(self, name, arg_nodes, env, line):
         closure = self.incantations.get(name)
@@ -403,12 +504,14 @@ class Interpreter:
             )
         frame = Environment(parent=self.globals)
         for param, value in zip(decl.params, args):
-            frame.define(param, value)
+            # parameters are plain pulses: the callee does not know how wide
+            # the caller's name was (a compiled call passes a 32-bit word)
+            frame.define(param, plain(value))
         self._call_depth += 1
         try:
             self.execute_block(decl.body, frame)
         except ReturnSignal as ret:
-            return ret.value
+            return plain(ret.value)
         finally:
             self._call_depth -= 1
         return None
@@ -448,6 +551,27 @@ class Interpreter:
             return to_glyph(value)
         if op == "flicker":
             return is_truthy(value)
+        if op in SIZES:              # p8 / p16 / p32: wrap inside the width
+            return SizedPulse(self._cast_pulse(value, node.line), SIZES[op])
+        if op == "bones":            # a glyph as a strand of byte pulses
+            if not isinstance(value, str):
+                raise RitualError("only a glyph has bones", node.line)
+            return list(value.encode("utf-8"))
+        if op == "flesh":            # a strand of byte pulses, as a glyph
+            try:
+                return bytes(value).decode("utf-8")
+            except (TypeError, ValueError):
+                raise RitualError(
+                    "only a strand of bytes (0 to 255) can take flesh",
+                    node.line)
+        if op == "unseal":           # a scroll on disk, read as a glyph
+            path = self._path(value, node.line)
+            try:
+                with open(path, "rb") as fh:
+                    return fh.read().decode("utf-8")
+            except (OSError, UnicodeDecodeError):
+                raise RitualError(f'the machine could not unseal "{path}"',
+                                  node.line)
         if op == "ascend":           # an octave up
             return self._numeric(value, node.line) * 2
         if op == "descend":          # an octave down
@@ -654,6 +778,12 @@ _EXEC_DISPATCH = {
     ast.CloseChannel: Interpreter._exec_close_channel,
     ast.Send: Interpreter._exec_send,
     ast.Invoke: Interpreter._exec_invoke,
+    ast.Inscribe: Interpreter._exec_inscribe,
+    ast.Whisper: Interpreter._exec_whisper,
+    ast.Rite: Interpreter._exec_rite,
+    ast.Ward: Interpreter._exec_ward,
+    ast.Engrave: Interpreter._exec_engrave,
+    ast.Depart: Interpreter._exec_depart,
 }
 
 # Expression dispatch.
@@ -664,4 +794,7 @@ _EVAL_DISPATCH = {
     ast.StrandLiteral: Interpreter._eval_strand,
     ast.Unary: Interpreter._eval_unary,
     ast.Binary: Interpreter._eval_binary,
+    ast.Peek: Interpreter._eval_peek,
+    ast.Listen: Interpreter._eval_listen,
+    ast.Heed: Interpreter._eval_heed,
 }

@@ -1,0 +1,49 @@
+~ tongue: bare
+~ kernel/speaker.glo — `burn` and `silence`: sound from the PC speaker.
+~
+~ The original PC had one loudspeaker and no sound card. It is wired to a
+~ single wire that the CPU can flip on and off, and that wire can instead be
+~ fed from channel 2 of the same timer chip that gives us milliseconds
+~ (kernel/timer.glo). Channel 2 in "square wave" mode flips its output every
+~ N input ticks, so the speaker's pitch is 1,193,182 / N Hz.
+~
+~ Three steps to make a note:
+~   1. tell the PIT's command port (0x43) "channel 2, 16-bit count, square wave";
+~   2. write the count N, low byte then high byte, to channel 2's port (0x42);
+~   3. open the gate: port 0x61 bit 0 lets the timer run, bit 1 connects it to
+~      the speaker. Silence is clearing those two bits.
+~
+~ QEMU emulates the speaker (qemu-system-x86 -machine pcspk-audiodev=...),
+~ so this really does make a sound, with no sound-card driver at all.
+invoke "timer"
+
+rite
+  incant speaker_off
+    let gate be listen port 0x61
+    whisper p8 (call band with gate, 0xFC) to port 0x61
+  end
+
+  incant speaker_on takes hz
+    ~ outside the range a speaker can usefully play, make no sound (and
+    ~ never divide by zero)
+    if hz below 20 or hz above 20000
+      call speaker_off
+      void
+    end
+    let divisor be call udiv with 1193182, hz
+    whisper p8 0xB6 to port 0x43
+    whisper p8 (call band with divisor, 255) to port 0x42
+    whisper p8 (call shr with divisor, 8) to port 0x42
+    let gate be listen port 0x61
+    whisper p8 (call bor with gate, 3) to port 0x61
+  end
+
+  ~ the hooks the `burn` / `silence` statements compile to
+  incant t_burn takes hz
+    call speaker_on with hz
+  end
+
+  incant t_silence
+    call speaker_off
+  end
+end
