@@ -18,6 +18,23 @@ hush
 
 ---
 
+## see it run
+
+`glossolalia-os`: a small offline operating system written in Glossolalia,
+built by a compiler written in Glossolalia (which compiles itself). Boot the
+ISO from [`releases/`](releases/) in QEMU, no network needed.
+
+![the OS booting in QEMU: version, help, add 2 3, choir](docs/glossolalia-demo.gif)
+
+The `agents` command: three agents (coder, runner, checker) taking turns as
+cooperative voices. They are rule-based and deterministic, a small fixed set of
+behaviors rather than a learned model, so treat them as a demonstration of the
+loop, not intelligence.
+
+![the in-OS agents writing, running and checking programs](docs/glossolalia-agents.gif)
+
+---
+
 ## the first utterance
 
 ```
@@ -401,7 +418,6 @@ qemu-system-i386 -cdrom releases/glossolalia-0.4.0.iso -nic none
 
 sha256 `c0507a3708440b84fa8c4a15eba8508b3e98046951d83617aaebefb9f33a297a`. Try `version`, `choir` and `agents` at the prompt.
 
-![glossolalia-os 0.3.0 booting in QEMU: version, help, add 2 3, choir](docs/glossolalia-demo.gif)
 
 ### Status
 
