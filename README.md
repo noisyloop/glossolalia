@@ -401,6 +401,8 @@ qemu-system-i386 -cdrom releases/glossolalia-0.3.0.iso -nic none
 
 sha256 `b799a35dae2a4083a8495fd1e27121d235eb15aa1ff46e313ba1bf3cab448bce`. Try `version` and `choir` at the prompt.
 
+![glossolalia-os 0.3.0 booting in QEMU: version, help, add 2 3, choir](docs/glossolalia-demo.gif)
+
 ### Status
 
 | milestone | | |
@@ -420,3 +422,24 @@ the bare tongue, compiled by a compiler written in Glossolalia (native since
 0.3.0), with interrupts, timer, keyboard, a REPL, sound and cooperative voices.
 What changed in 0.3.0: the compiler compiles itself (stage 1 and stage 2 are
 byte-identical), so `make iso` needs only `bootstrap/glossc`, nasm and GRUB. Python is only the reference interpreter and the old test suite. Limit: pulses are 31-bit in the full tongue.
+
+### Planned: an OSC connector for AI agents (not built yet)
+
+Idea: let an AI agent write Glossolalia by itself, over [OSC](https://opensoundcontrol.org/)
+(the same family of messages the tongue's sound side already speaks). The
+compiler is now one native binary (`bootstrap/glossc`) that needs no Python, so
+a small bridge can drive it directly:
+
+| direction | OSC address | carries |
+|---|---|---|
+| agent → machine | `/glo/source` | `.glo` source text (and optionally `target`: `linux` or `kernel`) |
+| machine → agent | `/glo/error` | compile errors, in the machine's voice, with the line number |
+| machine → agent | `/glo/out` | what the compiled program printed |
+| machine → agent | `/glo/exit` | the program's exit status |
+
+The loop an agent would run: send source, read `/glo/error`; if there is none,
+read `/glo/out` and `/glo/exit`, compare with what it expected, send a fix.
+`glossc` already exits 1 with a one-line error, and `tools/test_full.sh` already
+does the compile-run-compare step, so the bridge is mostly plumbing.
+Open questions: a sandbox and time limit for running untrusted programs, and
+whether `kernel` programs should boot in QEMU and stream COM1 back.
