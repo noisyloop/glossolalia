@@ -391,15 +391,15 @@ commands:
 
 The same text appears on the screen (VGA text mode) and on COM1.
 
-### Download the ISO (v0.2.0)
+### Download the ISO (v0.3.0)
 
-**[`releases/glossolalia-0.2.0.iso`](releases/glossolalia-0.2.0.iso)** (5 MB, i386, GRUB). Boot it offline:
+**[`releases/glossolalia-0.3.0.iso`](releases/glossolalia-0.3.0.iso)** (5 MB, i386, GRUB). Boot it offline:
 
 ```
-qemu-system-i386 -cdrom releases/glossolalia-0.2.0.iso -nic none
+qemu-system-i386 -cdrom releases/glossolalia-0.3.0.iso -nic none
 ```
 
-sha256 `1f8142be1179eab3e434c29d73d6eeaa63c78075c0e084b3fb40a8874c5e1979`. Try `version` and `choir` at the prompt.
+sha256 `b799a35dae2a4083a8495fd1e27121d235eb15aa1ff46e313ba1bf3cab448bce`. Try `version` and `choir` at the prompt.
 
 ### Status
 
@@ -410,13 +410,13 @@ sha256 `1f8142be1179eab3e434c29d73d6eeaa63c78075c0e084b3fb40a8874c5e1979`. Try `
 | 2 | first boot: Multiboot stub, VGA text + COM1, `make iso`, headless boot tests | done |
 | 3 | GDT, IDT, PIC remap, `ward` handlers, PIT-driven `drift`, PS/2 keyboard (with timeouts), REPL | done |
 | 4 | sound: `burn` / `silence` through the PC speaker (PIT channel 2); tests measure the pitch from a recorded WAV | done |
-| 5 | heap allocator + glyph/strand runtime (`rt/heap.glo`, `rt/glyph.glo`, bare tongue, tested on both targets) | **partial**: runtime done; the full-tongue compiler back end that emits tagged values is not written |
-| 6 | the choir: `rt/choir.glo` + `switch_stacks` (`voice_spawn`, `voice_yield`; `fn_addr` word) | **done as a library** (no `voice`/`breathe` syntax yet); boots in QEMU |
-| 7 | self-hosting: glossc compiles itself, byte-identical | **fails**: `tools/selfhost.sh` stops at the first glyph (needs milestone 5's back end) |
+| 5 | heap allocator, glyph/strand runtime (`rt/heap.glo`, `rt/glyph.glo`, `rt/full.glo`) and the full-tongue back end (`glossc/genfull.glo`, tagged words) | done |
+| 6 | the choir: `rt/choir.glo` + `switch_stacks` (`voice_spawn`, `voice_yield`; `fn_addr` word) | done as a library (no `voice`/`breathe` syntax yet); `choir` in the REPL |
+| 7 | self-hosting: glossc compiles itself, byte-identical | done: `make selfhost` (the seed `bootstrap/glossc` builds the OS with no Python) |
 | stretch | glossc inside the OS, GRUB-module ramdisk | not attempted |
 
 What works today: a bootable, offline, GRUB-loaded kernel written entirely in
-the bare tongue, compiled by a compiler written in Glossolalia (running on the
-Python interpreter), with interrupts, timer, keyboard, a REPL and sound.
-What does not exist yet: the compiler cannot compile itself, so the Python
-interpreter is still needed to build everything (milestone 7 removes that).
+the bare tongue, compiled by a compiler written in Glossolalia (native since
+0.3.0), with interrupts, timer, keyboard, a REPL, sound and cooperative voices.
+What changed in 0.3.0: the compiler compiles itself (stage 1 and stage 2 are
+byte-identical), so `make iso` needs only `bootstrap/glossc`, nasm and GRUB. Python is only the reference interpreter and the old test suite. Limit: pulses are 31-bit in the full tongue.

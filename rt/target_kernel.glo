@@ -21,6 +21,35 @@ rite
   ~ QEMU's isa-debug-exit device sits at port 0xF4: writing a byte v there
   ~ ends QEMU with status (v*2)+1, which is how a test reports pass or fail.
   ~ Without that device the write goes nowhere and we just halt.
+  ~ no files and no command line in a kernel (the full tongue's unseal gets -1)
+  incant t_open takes path, flags
+    echo 0 subtract by 1
+  end
+  incant t_close takes fd
+    echo 0 subtract by 1
+  end
+  incant t_read takes fd, buf, n
+    echo 0 subtract by 1
+  end
+  incant t_write takes fd, buf, n
+    echo 0 subtract by 1
+  end
+  incant t_seek takes fd, off, whence
+    echo 0 subtract by 1
+  end
+  incant t_argc
+    echo 1
+  end
+  incant t_arg takes i
+    echo 0
+  end
+  incant t_heap_base
+    echo 0x00400000
+  end
+  incant t_heap_end
+    echo 0x04000000
+  end
+
   incant t_exit takes code
     whisper p8 code to port 0xF4
     until 0

@@ -1,7 +1,7 @@
 # JOURNAL — what each milestone taught about how an operating system works
 
-Written at the end of milestone 4 (v0.2.0 adds a heap/glyph runtime and the choir as libraries; self-hosting still fails). The last
-section says what they would have taught and how the design is laid out for them.
+Written for v0.3.0: milestones 0-7 are built. The last
+section records what milestones 5-7 taught.
 
 ## Milestone 0 — teaching the interpreter to talk to a machine
 
@@ -68,7 +68,7 @@ is: set the mode, write a 16-bit count in two bytes, open a gate. Verifying it
 meant recording QEMU's speaker to a WAV and counting zero crossings: 440.0 Hz
 and 880.0 Hz, exactly. Hardware you can *measure* is the best kind to learn on.
 
-## Milestones 5-7 — not built
+## Milestones 5-7 — what they taught
 
 * **5 (heap, glyphs, strands):** the design is in SPEC-BARE.md §6.2: tagged
   words (odd = pulse), 16-byte object headers as immutable views over a shared

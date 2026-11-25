@@ -45,13 +45,14 @@ phdr:
   dd $$                       ; to this virtual address...
   dd $$                       ; ...and this physical one (ignored on Linux)
   dd prog_end - $$            ; this many bytes come from the file
-  dd 0x00400000               ; but reserve 4 MiB in memory; the rest starts as zeros
+  dd 0x10000000               ; but reserve 256 MiB in memory (the heap lives past 0x08400000); the rest starts as zeros
   dd 7                        ; permissions: readable, writable, executable
   dd 0x1000                   ; alignment: one page
 
 ; ---- The entry point ------------------------------------------------------
 _start:
-  call g_scroll               ; run the program: every top-level statement, in order
+  mov [0x08200800], esp       ; remember the initial stack: argc and argv live there (heed)
+  call g_scroll              ; run the program: every top-level statement, in order
   push 0                      ; then leave with status 0 (one argument for rt_exit)
   call g_rt_exit
 

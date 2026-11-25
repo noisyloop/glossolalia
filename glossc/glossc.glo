@@ -16,6 +16,7 @@
 invoke "lexer"
 invoke "parser"
 invoke "gen"
+invoke "genfull"
 
 ~ ── pass 1: what exists ──────────────────────────────────────────────
 ~ Incantations, wards and globals may be used before they are spoken, so
@@ -97,13 +98,17 @@ incant gen_main_block takes stmts, tongue
       call gen_main_block with (s at 1), (s at 2)
     else
       if k is "rite"
-        call gen_main_block with (s at 1), tongue
+        call gen_main_block with (s at 1), "bare"
       else
         if k is "incant" or k is "ward"
           hush
         else
           set cur_tongue to tongue
-          call bare_stmt with s
+          if tongue is "bare"
+            call bare_stmt with s
+          else
+            call full_stmt with s
+          end
         end
       end
     end
@@ -170,9 +175,19 @@ if target is "kernel"
 end
 
 ~ the runtime and the target's own scrolls come first, then the program
-let program be weave (call load_scroll with "rt/core", 0)
-set program to program add by (weave (call load_scroll with ("rt/target_" add by target), 0))
-set program to program add by (weave (call load_file with input, 0))
+let core_part be call load_scroll with "rt/core", 0
+let target_part be call load_scroll with ("rt/target_" add by target), 0
+let user_part be call load_file with input, 0
+let program be weave core_part
+if (user_part at 2) is "full"
+  ~ a full-tongue program also carries its runtime, and starts the heap first
+  set program to program add by (weave (call load_scroll with "rt/full", 0))
+end
+set program to program add by (weave target_part)
+if (user_part at 2) is "full"
+  set program to program add by (weave (weave "callstmt", "rtf_init", weave, 0))
+end
+set program to program add by (weave user_part)
 
 call collect with program, "full"
 

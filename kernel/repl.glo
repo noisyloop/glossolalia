@@ -174,7 +174,7 @@ rite
       void
     end
     if call line_is with (call text_addr with "version"), (call text_len with "version")
-      speak "glossolalia-os 0.2.0"
+      speak "glossolalia-os 0.3.0"
       void
     end
     if call line_is with (call text_addr with "choir"), (call text_len with "choir")

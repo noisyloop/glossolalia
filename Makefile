@@ -21,15 +21,27 @@ RUNTIME  := $(wildcard rt/*.glo)
 GLUE     := $(wildcard targets/*.asm)
 
 .DELETE_ON_ERROR:
-.PHONY: all iso run test test-interpreter test-compiler test-boot clean
+.PHONY: all iso run test test-interpreter test-compiler test-boot selfhost bootstrap test-full clean
 all: iso
 
 # ---- building a kernel: scroll -> NASM -> flat binary -> bootable ISO -------
 # glossc turns kernel/NAME.glo into one NASM file; nasm makes a flat binary
 # (no linker); grub-mkrescue wraps it with GRUB into an ISO.
-build/%.asm: kernel/%.glo $(wildcard kernel/*.glo) $(COMPILER) $(RUNTIME) $(GLUE)
+# Since milestone 7 the compiler is a native program (bootstrap/glossc, built
+# by itself): building the OS needs no Python. GLOSSC=... to override.
+GLOSSC ?= bootstrap/glossc
+
+build/%.asm: kernel/%.glo $(wildcard kernel/*.glo) $(COMPILER) $(RUNTIME) $(GLUE) $(GLOSSC)
 	@mkdir -p build
-	$(GLORUN) glossc/glossc.glo --target kernel --home . -o $@ $<
+	$(GLOSSC) --target kernel --home . -o $@ $<
+
+# Prove the compiler compiles itself (stage 1 == stage 2, byte for byte).
+selfhost:
+	sh tools/selfhost.sh
+
+# ... and replace the seed with the freshly built compiler.
+bootstrap:
+	sh tools/selfhost.sh --update
 
 build/%.bin: build/%.asm
 	$(NASM) -f bin -I./ $< -o $@
@@ -63,7 +75,10 @@ test-compiler:
 test-boot:
 	$(PY) -m pytest -q ostests/test_boot.py ostests/test_interrupts.py ostests/test_sound.py ostests/test_choir.py
 
-test: test-interpreter test-compiler test-boot
+test-full:
+	sh tools/test_full.sh
+
+test: test-interpreter test-compiler test-full test-boot
 
 clean:
 	rm -rf build

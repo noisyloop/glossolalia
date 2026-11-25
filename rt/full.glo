@@ -1,0 +1,342 @@
+~ tongue: bare
+~ rt/full.glo — what compiled full-tongue code calls (milestone 5).
+~
+~ Every value is one tagged word (SPEC-BARE.md §6.2): odd = pulse (n*2+1),
+~ 0 = void, 4 = false, 8 = true, a multiple of 4 >= 16 = pointer to an object
+~ {kind, length, data, buffer} (kind 1 glyph, 2 strand). The generated code
+~ calls these with tagged words and gets a tagged word back; the few that take
+~ a plain number say so. Written in the bare tongue, on rt/heap and rt/glyph.
+invoke "rt/glyph"
+
+rite
+  incant rtf_init
+    call heap_init with (call t_heap_base), (call t_heap_end)
+  end
+
+  incant rtf_stop takes addr, n
+    call rt_say with addr, n
+    call t_putc with 10
+    call t_exit with 1
+  end
+
+  incant rtf_isobj takes w
+    if (call band with w, 3) not 0
+      echo 0
+    end
+    if w below 16
+      echo 0
+    end
+    echo 1
+  end
+
+  incant rtf_lit takes addr, n
+    echo call glyph_from with addr, n
+  end
+
+  ~ a plain signed number as a glyph
+  incant rtf_itoa takes v
+    let neg be 0
+    if v below 0
+      set neg to 1
+      set v to 0 subtract by v
+    end
+    let n be 0
+    let more be 1
+    until more is 0
+      inscribe p8 (48 add by (call umod with v, 10)) at (t_scratch add by 512 add by n)
+      set v to call udiv with v, 10
+      rise n
+      if v is 0
+        set more to 0
+      end
+    end
+    let out be call obj_new with 1, (n add by 24)
+    let buf be peek p32 (out add by 12)
+    let data be peek p32 (out add by 8)
+    let k be 0
+    if neg is 1
+      inscribe p8 45 at data
+      set k to 1
+    end
+    let i be n
+    until i is 0
+      fall i
+      inscribe p8 (peek p8 (t_scratch add by 512 add by i)) at (data add by k)
+      rise k
+    end
+    inscribe p32 k at (out add by 4)
+    inscribe p32 k at (buf add by 4)
+    echo out
+  end
+
+  incant rtf_totext takes w
+    if call band with w, 1
+      echo call rtf_itoa with (call sar with w, 1)
+    end
+    if w is 0
+      echo call rtf_lit with (call text_addr with "void"), 4
+    end
+    if w is 8
+      echo call rtf_lit with (call text_addr with "true"), 4
+    end
+    if w is 4
+      echo call rtf_lit with (call text_addr with "false"), 5
+    end
+    if call rtf_isobj with w
+      if (peek p32 w) is 1
+        echo w
+      end
+      echo call rtf_lit with (call text_addr with "[strand]"), 8
+    end
+    echo call rtf_lit with (call text_addr with "?"), 1
+  end
+
+  incant rtf_single takes w
+    let s be call obj_new with 2, 16
+    inscribe p32 w at (peek p32 (s add by 8))
+    inscribe p32 1 at (s add by 4)
+    inscribe p32 4 at ((peek p32 (s add by 12)) add by 4)
+    echo s
+  end
+
+  incant rtf_add takes a, b
+    if (call band with a, 1) and (call band with b, 1)
+      echo (a add by b) subtract by 1
+    end
+    if call rtf_isobj with a
+      if (peek p32 a) is 1
+        echo call obj_append with a, (call rtf_totext with b)
+      end
+      if call rtf_isobj with b
+        if (peek p32 b) is 2
+          echo call obj_append with a, b
+        end
+      end
+      echo call obj_append with a, (call rtf_single with b)
+    end
+    echo call obj_append with (call rtf_totext with a), (call rtf_totext with b)
+  end
+
+  incant rtf_sub takes a, b
+    echo (a subtract by b) add by 1
+  end
+
+  incant rtf_mul takes a, b
+    echo (((call sar with a, 1) scale by (call sar with b, 1)) scale by 2) add by 1
+  end
+
+  incant rtf_mod takes a, b
+    echo (((call sar with a, 1) modulate by (call sar with b, 1)) scale by 2) add by 1
+  end
+
+  incant rtf_truthy takes w
+    if w is 0
+      echo 0
+    end
+    if w is 4
+      echo 0
+    end
+    if w is 8
+      echo 1
+    end
+    if call band with w, 1
+      if w is 1
+        echo 0
+      end
+      echo 1
+    end
+    if call rtf_isobj with w
+      if (peek p32 (w add by 4)) is 0
+        echo 0
+      end
+    end
+    echo 1
+  end
+
+  ~ the length, as a tagged pulse
+  incant rtf_count takes x
+    if call rtf_isobj with x
+      echo ((peek p32 (x add by 4)) scale by 2) add by 1
+    end
+    echo 1
+  end
+
+  ~ i is a tagged pulse
+  incant rtf_at takes x, i
+    let idx be call sar with i, 1
+    if call rtf_isobj with x
+      let n be peek p32 (x add by 4)
+      if idx below n
+        let data be peek p32 (x add by 8)
+        if (peek p32 x) is 2
+          echo peek p32 (data add by (idx scale by 4))
+        end
+        echo call rtf_lit with (data add by idx), 1
+      end
+    end
+    call rtf_stop with (call text_addr with "the machine stopped: that place is not in the glyph or strand"), (call text_len with "the machine stopped: that place is not in the glyph or strand")
+  end
+
+  ~ equality by value: true (8) or false (4)
+  incant rtf_eq takes a, b
+    if a is b
+      echo 8
+    end
+    if (call rtf_isobj with a) and (call rtf_isobj with b)
+      let ka be peek p32 a
+      if ka not (peek p32 b)
+        echo 4
+      end
+      let n be peek p32 (a add by 4)
+      if n not (peek p32 (b add by 4))
+        echo 4
+      end
+      let da be peek p32 (a add by 8)
+      let db be peek p32 (b add by 8)
+      let i be 0
+      until i is n
+        if ka is 1
+          if (peek p8 (da add by i)) not (peek p8 (db add by i))
+            echo 4
+          end
+        else
+          if (call rtf_eq with (peek p32 (da add by (i scale by 4))), (peek p32 (db add by (i scale by 4)))) is 4
+            echo 4
+          end
+        end
+        rise i
+      end
+      echo 8
+    end
+    echo 4
+  end
+
+  ~ a strand of n slots (n is a plain number), filled in by rtf_weave_set
+  incant rtf_weave_new takes n
+    let s be call obj_new with 2, ((n scale by 4) add by 16)
+    inscribe p32 n at (s add by 4)
+    inscribe p32 (n scale by 4) at ((peek p32 (s add by 12)) add by 4)
+    echo s
+  end
+
+  incant rtf_weave_set takes s, i, v
+    inscribe p32 v at ((peek p32 (s add by 8)) add by (i scale by 4))
+    echo s
+  end
+
+  ~ bones: a glyph's bytes as a strand of pulses
+  incant rtf_bones takes g
+    let n be peek p32 (g add by 4)
+    let s be call rtf_weave_new with n
+    let data be peek p32 (g add by 8)
+    let sd be peek p32 (s add by 8)
+    let i be 0
+    until i is n
+      inscribe p32 (((peek p8 (data add by i)) scale by 2) add by 1) at (sd add by (i scale by 4))
+      rise i
+    end
+    echo s
+  end
+
+  ~ flesh: a strand of pulses (bytes) back into a glyph
+  incant rtf_flesh takes s
+    let n be peek p32 (s add by 4)
+    let g be call obj_new with 1, (n add by 16)
+    let sd be peek p32 (s add by 8)
+    let data be peek p32 (g add by 8)
+    let i be 0
+    until i is n
+      inscribe p8 (call sar with (peek p32 (sd add by (i scale by 4))), 1) at (data add by i)
+      rise i
+    end
+    inscribe p32 n at (g add by 4)
+    inscribe p32 n at ((peek p32 (g add by 12)) add by 4)
+    echo g
+  end
+
+  incant rtf_speak takes w
+    let g be call rtf_totext with w
+    let data be peek p32 (g add by 8)
+    let n be peek p32 (g add by 4)
+    let i be 0
+    until i is n
+      call t_putc with (peek p8 (data add by i))
+      rise i
+    end
+    call t_putc with 10
+  end
+
+  ~ the glyph's bytes at t_scratch+1024, NUL-ended (a path for the system)
+  incant rtf_cstr takes g
+    let data be peek p32 (g add by 8)
+    let n be peek p32 (g add by 4)
+    let i be 0
+    until i is n
+      inscribe p8 (peek p8 (data add by i)) at (t_scratch add by 1024 add by i)
+      rise i
+    end
+    inscribe p8 0 at (t_scratch add by 1024 add by n)
+    echo t_scratch add by 1024
+  end
+
+  incant rtf_unseal takes path
+    let fd be call t_open with (call rtf_cstr with path), 0
+    if fd below 0
+      call rtf_stop with (call text_addr with "the machine stopped: a scroll could not be opened"), (call text_len with "the machine stopped: a scroll could not be opened")
+    end
+    let size be call t_seek with fd, 0, 2
+    call t_seek with fd, 0, 0
+    let g be call obj_new with 1, (size add by 16)
+    let data be peek p32 (g add by 8)
+    let got be 0
+    until got is size
+      let r be call t_read with fd, (data add by got), (size subtract by got)
+      if r below 1
+        set got to size
+      else
+        set got to got add by r
+      end
+    end
+    call t_close with fd
+    inscribe p32 size at (g add by 4)
+    inscribe p32 size at ((peek p32 (g add by 12)) add by 4)
+    echo g
+  end
+
+  ~ engrave: write a value's text to a path (append is a plain 0 or 1)
+  incant rtf_engrave takes w, path, append
+    let g be call rtf_totext with w
+    let flags be 0x241
+    if append is 1
+      set flags to 0x441
+    end
+    let fd be call t_open with (call rtf_cstr with path), flags
+    if fd below 0
+      call rtf_stop with (call text_addr with "the machine stopped: a file could not be written"), (call text_len with "the machine stopped: a file could not be written")
+    end
+    call t_write with fd, (peek p32 (g add by 8)), (peek p32 (g add by 4))
+    call t_close with fd
+  end
+
+  ~ heed: the words after the program's name, as a strand of glyphs
+  incant rtf_heed
+    let argc be call t_argc
+    let n be argc subtract by 1
+    if n below 0
+      set n to 0
+    end
+    let s be call rtf_weave_new with n
+    let sd be peek p32 (s add by 8)
+    let i be 0
+    until i is n
+      let p be call t_arg with (i add by 1)
+      let len be 0
+      until (peek p8 (p add by len)) is 0
+        rise len
+      end
+      inscribe p32 (call glyph_from with p, len) at (sd add by (i scale by 4))
+      rise i
+    end
+    echo s
+  end
+end

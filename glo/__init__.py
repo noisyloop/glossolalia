@@ -11,7 +11,7 @@ Public surface::
 Or use the ``glo`` command line (see ``glo.cli``).
 """
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 from .errors import (  # noqa: E402
     GlossolaliaError,
