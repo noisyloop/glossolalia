@@ -1,0 +1,28 @@
+~ tongue: bare
+~ arithmetic, precedence, comparisons: the postfix word operators
+speak 2 add by 3 scale by 4
+speak 20 subtract by 5 subtract by 3
+speak 17 modulate by 5
+speak 7 scale by 6
+speak 100 subtract by 250
+let a be 10
+add a by 5
+subtract a by 3
+scale a by 2
+modulate a by 7
+speak a
+rise a
+rise a by 10
+fall a by 3
+speak a
+speak 5 above 3
+speak 5 below 3
+speak 5 is 5
+speak 5 not 5
+speak 1 and 0
+speak 1 or 0
+speak not 0
+speak flicker 7
+speak (3 add by 4) scale by (2 subtract by 5)
+speak 0 subtract by 2147483647
+speak 1 below 2 and 2 below 3

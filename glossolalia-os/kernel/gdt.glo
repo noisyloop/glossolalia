@@ -1,0 +1,36 @@
+~ tongue: bare
+~ kernel/gdt.glo — the Global Descriptor Table.
+~
+~ Even in "flat" 32-bit mode every memory access goes through a segment, and
+~ a segment register holds an index into a table the CPU reads from memory:
+~ the GDT. GRUB gave us a table of its own, but it lives in GRUB's memory
+~ and we are about to overwrite that, so the first thing a kernel does is
+~ build its own. Three entries are enough for a flat, ring-0-only system:
+~
+~     0  the null descriptor (the CPU insists the first entry is unused)
+~     1  code: base 0, limit 4 GiB, executable, readable        selector 0x08
+~     2  data: base 0, limit 4 GiB, writable                    selector 0x10
+~
+~ Each descriptor is 8 bytes, which we write as two 32-bit words. The high
+~ word's bytes are: base[31:24], flags+limit[19:16], access, base[23:16].
+~   access 0x9A = present, ring 0, code, readable   (0x92: data, writable)
+~   flags  0xC  = 4 KiB granularity, 32-bit         limit[19:16] = 0xF
+~ so the limit is 0xFFFFF pages of 4 KiB = 4 GiB.
+
+rite
+  let gdt_base be 0x00010000
+
+  incant gdt_set takes index, low, high
+    inscribe p32 low at gdt_base add by (index scale by 8)
+    inscribe p32 high at gdt_base add by (index scale by 8) add by 4
+  end
+
+  incant gdt_init
+    call gdt_set with 0, 0, 0
+    call gdt_set with 1, 0x0000FFFF, 0x00CF9A00
+    call gdt_set with 2, 0x0000FFFF, 0x00CF9200
+    ~ lgdt cannot be said in the bare tongue; targets/kernel.asm does it, and
+    ~ reloads every segment register from the new table. Limit = bytes - 1.
+    call load_gdt with gdt_base, 23
+  end
+end

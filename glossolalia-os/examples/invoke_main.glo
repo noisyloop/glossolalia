@@ -1,0 +1,5 @@
+~ tongue: bare
+invoke "lib/mathlib"
+invoke "lib/mathlib"
+speak lib_loaded
+speak call square with 12

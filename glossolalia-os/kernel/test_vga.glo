@@ -1,0 +1,18 @@
+~ tongue: bare
+~ kernel/test_vga.glo — milestone 2's screen test.
+~ Prints enough lines to scroll the screen, then waits so the test can read
+~ the video memory back through QEMU's monitor.
+invoke "console"
+
+call console_init
+speak "glossolalia-os"
+let n be 1
+until n above 30
+  call say with "line "
+  speak n
+  rise n
+end
+speak "screen ok"
+until 0
+  call hlt
+end

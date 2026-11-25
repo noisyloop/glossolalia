@@ -1,0 +1,176 @@
+~ tongue: bare
+~ rt/bits.glo — the machine words, written out in the bare tongue itself.
+~
+~ The grammar has no shifts, no bitwise operators and no division
+~ (SPEC-BARE.md §7). glossc compiles calls to shl shr sar band bor bxor udiv
+~ umod sdiv as single instructions. THIS file is the definition of what they
+~ mean, written with only add / subtract / scale / compare, so that:
+~
+~   * the interpreter, which has no such instructions, can run programs that
+~     use them (invoke "rt/bits");
+~   * the tests can check that the one-instruction versions agree with these
+~     slow, obviously-correct ones.
+~
+~ If a program invokes this scroll, THESE definitions are used instead of the
+~ in-line ones (a program's own incantation always wins over a machine word).
+~ All results are 32-bit and come back as plain (signed) pulses; wrap them in
+~ p32 where an unsigned view is wanted.
+
+~ 2 to the power i, for i from 0 to 31
+incant pow2 takes i
+  let r be p32 1
+  repeat i
+    set r to r scale by 2
+  end
+  echo r
+end
+
+~ a 32-bit value as a plain pulse: 2^32 - 1 reads back as -1
+incant signed32 takes v
+  if v above 2147483647
+    echo v subtract by 2147483648 subtract by 2147483648
+  end
+  echo v
+end
+
+incant shl takes x, n
+  let r be p32 x
+  repeat n
+    set r to r scale by 2
+  end
+  echo call signed32 with r
+end
+
+~ logical shift right: peel the value apart bit by bit, high to low
+incant shr takes x, n
+  let v be p32 x
+  let r be p32 0
+  let i be 31
+  until i below n
+    let b be call pow2 with i
+    if v above (b subtract by 1)
+      set v to v subtract by b
+      set r to r add by (call pow2 with (i subtract by n))
+    end
+    fall i
+  end
+  echo call signed32 with r
+end
+
+~ arithmetic shift right: the vacated bits copy the sign bit
+incant sar takes x, n
+  let v be p32 x
+  if v above 2147483647
+    ~ negative: flip every bit, shift logically, flip back
+    let flipped be call bitop with v, 4294967295, 2
+    let moved be call shr with flipped, n
+    echo call bitop with moved, 4294967295, 2
+  end
+  echo call shr with v, n
+end
+
+~ and (op 0), or (1), xor (2) of two 32-bit values, one bit at a time
+incant bitop takes a, b, op
+  let x be p32 a
+  let y be p32 b
+  let r be p32 0
+  let i be 31
+  until i is -1
+    let p be call pow2 with i
+    let ax be 0
+    let bx be 0
+    if x above (p subtract by 1)
+      set ax to 1
+      set x to x subtract by p
+    end
+    if y above (p subtract by 1)
+      set bx to 1
+      set y to y subtract by p
+    end
+    let bit be 0
+    if op is 0 and ax is 1 and bx is 1
+      set bit to 1
+    end
+    if op is 1 and (ax is 1 or bx is 1)
+      set bit to 1
+    end
+    if op is 2 and ax not bx
+      set bit to 1
+    end
+    if bit is 1
+      set r to r add by p
+    end
+    fall i
+  end
+  echo call signed32 with r
+end
+
+incant band takes a, b
+  echo call bitop with a, b, 0
+end
+
+incant bor takes a, b
+  echo call bitop with a, b, 1
+end
+
+incant bxor takes a, b
+  echo call bitop with a, b, 2
+end
+
+~ shift-and-subtract long division. udiv by zero gives 0 (the in-line
+~ version traps; a test should not divide by zero).
+incant udivmod takes a, b, want_rem
+  let x be p32 a
+  let d be p32 b
+  let q be p32 0
+  let r be p32 0
+  if d is 0
+    echo 0
+  end
+  let i be 31
+  until i is -1
+    let p be call pow2 with i
+    set r to r scale by 2
+    if x above (p subtract by 1)
+      set x to x subtract by p
+      set r to r add by 1
+    end
+    if r above (d subtract by 1)
+      set r to r subtract by d
+      set q to q add by p
+    end
+    fall i
+  end
+  if want_rem is 1
+    echo call signed32 with r
+  end
+  echo call signed32 with q
+end
+
+incant udiv takes a, b
+  echo call udivmod with a, b, 0
+end
+
+incant umod takes a, b
+  echo call udivmod with a, b, 1
+end
+
+~ signed division truncates toward zero, like the CPU's idiv
+incant sdiv takes a, b
+  let neg be 0
+  let x be a
+  let y be b
+  if x below 0
+    set neg to 1 subtract by neg
+    set x to 0 subtract by x
+  end
+  if y below 0
+    set neg to 1 subtract by neg
+    set y to 0 subtract by y
+  end
+  let q be call udivmod with x, y, 0
+  if neg is 1
+    echo 0 subtract by q
+  end
+  echo q
+end

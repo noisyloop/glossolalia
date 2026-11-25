@@ -1,0 +1,15 @@
+~ tongue: bare
+~ whisper and listen: a port is a latch that remembers the last write
+rite
+  whisper p8 0x2A to port 0xE9
+  speak listen port 0xE9
+  speak listen port 0x60
+  whisper p16 0x1FF to port 0x70
+  speak listen p16 port 0x70
+  speak listen port 0x70
+  whisper p32 0x12345678 to port 0x80
+  speak listen p32 port 0x80
+  speak listen p16 port 0x80
+  whisper p8 300 to port 0x90
+  speak listen port 0x90
+end

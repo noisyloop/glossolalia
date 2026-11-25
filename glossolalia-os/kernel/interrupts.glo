@@ -1,0 +1,24 @@
+~ tongue: bare
+~ kernel/interrupts.glo — bringing the machine's nervous system up, in order.
+~
+~ The order matters: the tables must exist before anything can interrupt us,
+~ the controller must be remapped before its lines are unmasked, and the CPU
+~ must not be told to listen (sti) until all of that is done.
+invoke "gdt"
+invoke "idt"
+invoke "exceptions"
+invoke "pic"
+invoke "timer"
+invoke "keyboard"
+
+rite
+  incant interrupts_init
+    call gdt_init            ~ our own segments
+    call idt_init            ~ an empty interrupt table...
+    call exceptions_init     ~ ...with the CPU's complaints handled
+    call pic_init            ~ remap the two PICs to vectors 32-47
+    call timer_init          ~ 1000 ticks a second on IRQ 0
+    call kb_init             ~ the keyboard on IRQ 1
+    call sti                 ~ and now the CPU listens
+  end
+end

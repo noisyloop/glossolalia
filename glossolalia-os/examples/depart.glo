@@ -1,0 +1,7 @@
+~ tongue: bare
+speak "about to leave"
+incant leave takes code
+  depart code
+end
+call leave with 7
+speak "never said"

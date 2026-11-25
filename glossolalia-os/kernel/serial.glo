@@ -1,0 +1,39 @@
+~ tongue: bare
+~ kernel/serial.glo — COM1, the first serial port.
+~
+~ Why bother, when there is a screen? Because a serial port can be read by a
+~ program: QEMU connects COM1 to its own standard output (-serial stdio), so
+~ the tests can boot the OS with no window at all and read what it said.
+~
+~ The port is a 16550 UART, a handful of registers starting at I/O port
+~ 0x3F8. Writing the byte to 0x3F8 sends it; bit 5 of the line-status
+~ register (0x3FD) says "ready for the next byte".
+
+rite
+  incant serial_init
+    whisper p8 0x00 to port 0x3F9     ~ no serial interrupts (we poll)
+    whisper p8 0x80 to port 0x3FB     ~ DLAB on: 0x3F8/0x3F9 now set the speed
+    whisper p8 0x03 to port 0x3F8     ~ divisor 3 = 38400 baud (low byte)
+    whisper p8 0x00 to port 0x3F9     ~ (high byte)
+    whisper p8 0x03 to port 0x3FB     ~ 8 data bits, no parity, 1 stop; DLAB off
+    whisper p8 0xC7 to port 0x3FA     ~ turn on the FIFO, clear it
+    whisper p8 0x0B to port 0x3FC     ~ DTR + RTS + OUT2: the line is live
+  end
+
+  ~ wait (but not forever) until the transmitter can take another byte
+  incant serial_raw takes c
+    let spins be 0
+    until (call band with (listen port 0x3FD), 32) not 0 or spins above 100000
+      rise spins
+    end
+    whisper p8 c to port 0x3F8
+  end
+
+  ~ a terminal wants CR LF where we say LF
+  incant serial_put takes c
+    if c is 10
+      call serial_raw with 13
+    end
+    call serial_raw with c
+  end
+end

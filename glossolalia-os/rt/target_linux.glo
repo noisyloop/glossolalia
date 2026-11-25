@@ -1,0 +1,41 @@
+~ tongue: bare
+~ rt/target_linux.glo — what the runtime needs from Linux.
+~
+~ The hooks, each one system call (see targets/linux.asm for `syscall`):
+~   write(fd, buffer, 1)   system call 4
+~   exit(code)             system call 1
+
+rite
+  ~ A little memory the runtime owns (see the memory map in linux.asm).
+  let t_scratch be 0x08200000
+  ~ where console output goes: 1 is standard output, 2 standard error
+  let t_fd be 1
+
+  incant t_putc takes c
+    inscribe p8 c at t_scratch
+    call syscall with 4, t_fd, t_scratch, 1
+  end
+
+  incant t_exit takes code
+    call syscall with 1, code, 0, 0
+  end
+
+  ~ There is no speaker to drive from a normal process: tones are silent here
+  ~ (the interpreter likewise only draws them on stderr), so the same program
+  ~ prints the same text on both.
+  incant t_burn takes hz
+    hush
+  end
+
+  incant t_silence
+    hush
+  end
+
+  ~ nanosleep(&timespec, 0): system call 162. A timespec is two 32-bit words,
+  ~ seconds then nanoseconds, which we build in scratch memory.
+  incant t_drift takes ms
+    inscribe p32 (call udiv with ms, 1000) at t_scratch add by 256
+    inscribe p32 ((call umod with ms, 1000) scale by 1000000) at t_scratch add by 260
+    call syscall with 162, t_scratch add by 256, 0, 0
+  end
+end

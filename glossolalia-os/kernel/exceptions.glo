@@ -1,0 +1,53 @@
+~ tongue: bare
+~ kernel/exceptions.glo — what to do when the CPU itself objects.
+~
+~ Vectors 0-31 are the CPU's own: it raises them when something is wrong with
+~ the program that is running. We name the ones a young kernel meets most
+~ often. Each handler tells the world and stops; the machine cannot go on,
+~ because the instruction that faulted would simply fault again.
+~ (`depart 99` ends QEMU with status 199 when a test device is plugged in,
+~ and halts the machine for good when it is not.)
+
+invoke "idt"
+
+rite
+  incant fatal_exception
+    until 0
+      call cli
+      call hlt
+    end
+  end
+
+  ward 0
+    speak "exception: divide error"
+    depart 99
+  end
+
+  ward 6
+    speak "exception: invalid opcode"
+    depart 99
+  end
+
+  ward 8
+    speak "exception: double fault"
+    depart 99
+  end
+
+  ward 13
+    speak "exception: general protection fault"
+    depart 99
+  end
+
+  ward 14
+    speak "exception: page fault"
+    depart 99
+  end
+
+  incant exceptions_init
+    call idt_set with 0, (call ward_addr with 0)
+    call idt_set with 6, (call ward_addr with 6)
+    call idt_set with 8, (call ward_addr with 8)
+    call idt_set with 13, (call ward_addr with 13)
+    call idt_set with 14, (call ward_addr with 14)
+  end
+end

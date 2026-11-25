@@ -1,0 +1,24 @@
+~ tongue: bare
+~ kernel/console.glo — the console is the screen and the serial port at once.
+~ (rt/target_kernel.glo makes `speak` call this for every byte.)
+invoke "vga"
+invoke "serial"
+
+rite
+  incant console_init
+    call serial_init
+    call vga_clear
+  end
+
+  incant console_putc takes c
+    call vga_put with c
+    if c is 8
+      ~ a terminal only moves back on BS; to erase, back up, blank, back up
+      call serial_put with 8
+      call serial_put with 32
+      call serial_put with 8
+    else
+      call serial_put with c
+    end
+  end
+end

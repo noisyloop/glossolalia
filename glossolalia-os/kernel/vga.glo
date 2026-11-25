@@ -1,0 +1,87 @@
+~ tongue: bare
+~ kernel/vga.glo — the text screen.
+~
+~ In the PC's text mode the video card shows 80 columns by 25 rows, and it
+~ reads them straight out of ordinary RAM at 0xB8000. Each screen cell is one
+~ 16-bit word: the low byte is the character (code page 437, which agrees
+~ with ASCII for what we print), the high byte is the colour: background in
+~ the high nibble, foreground in the low one. So putting a letter on the
+~ screen is just storing a number to an address — which is what `inscribe` is.
+
+rite
+  let vga_base be 0xB8000
+  let vga_attr be 0x0B          ~ light cyan on black
+  let vga_x be 0
+  let vga_y be 0
+
+  ~ a blank cell in the current colour
+  incant vga_blank
+    echo vga_attr scale by 256 add by 32
+  end
+
+  incant vga_clear
+    let i be 0
+    until i is 2000             ~ 80 * 25 cells
+      inscribe p16 (call vga_blank) at (vga_base add by (i scale by 2))
+      rise i
+    end
+    set vga_x to 0
+    set vga_y to 0
+    call vga_cursor
+  end
+
+  ~ The little blinking underline is drawn by the video card's own
+  ~ registers, not by the cells. They are reached through two I/O ports:
+  ~ write a register number to 0x3D4, then its value to 0x3D5. Registers
+  ~ 0x0E / 0x0F hold the high / low byte of the cursor's cell number.
+  incant vga_cursor
+    let pos be vga_y scale by 80 add by vga_x
+    whisper p8 0x0F to port 0x3D4
+    whisper p8 (call band with pos, 255) to port 0x3D5
+    whisper p8 0x0E to port 0x3D4
+    whisper p8 (call shr with pos, 8) to port 0x3D5
+  end
+
+  ~ The screen is full: move rows 1..24 up one row (a memory copy, four
+  ~ bytes at a time), then blank the bottom row.
+  incant vga_scroll
+    let i be 0
+    until i is 960              ~ 24 rows * 80 cells * 2 bytes / 4
+      inscribe p32 (peek p32 (vga_base add by 160 add by (i scale by 4))) at (vga_base add by (i scale by 4))
+      rise i
+    end
+    let c be 0
+    until c is 80
+      inscribe p16 (call vga_blank) at (vga_base add by 3840 add by (c scale by 2))
+      rise c
+    end
+  end
+
+  incant vga_put takes c
+    if c is 10
+      set vga_x to 0
+      rise vga_y
+    else
+      if c is 8                 ~ backspace: step back and blank the cell
+        if vga_x above 0
+          fall vga_x
+          inscribe p16 (call vga_blank) at (vga_base add by ((vga_y scale by 80 add by vga_x) scale by 2))
+        end
+      else
+        if c not 13
+          inscribe p16 (vga_attr scale by 256 add by c) at (vga_base add by ((vga_y scale by 80 add by vga_x) scale by 2))
+          rise vga_x
+          if vga_x is 80
+            set vga_x to 0
+            rise vga_y
+          end
+        end
+      end
+    end
+    if vga_y is 25
+      call vga_scroll
+      set vga_y to 24
+    end
+    call vga_cursor
+  end
+end

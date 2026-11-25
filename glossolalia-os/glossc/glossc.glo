@@ -1,0 +1,186 @@
+~ glossc — the Glossolalia compiler, written in Glossolalia.
+~
+~     glossc [--target linux|kernel] [--home DIR] -o out.asm scroll.glo
+~
+~ It reads a scroll (and every scroll it invokes), and writes ONE flat NASM
+~ file: the whole program plus the runtime plus the target's hand-written
+~ glue. Assemble it with `nasm -f bin -I DIR/ out.asm`; there is no linker.
+~
+~ Two ways to run it, and this is the bootstrap (SPEC-BARE.md §8):
+~
+~   1. on the Python interpreter:   python3 tools/glorun.py glossc/glossc.glo ...
+~   2. as a native program, compiled by glossc itself (milestone 7).
+~
+~ The pipeline is: lex -> parse -> collect names -> generate code.
+
+invoke "lexer"
+invoke "parser"
+invoke "gen"
+
+~ ── pass 1: what exists ──────────────────────────────────────────────
+~ Incantations, wards and globals may be used before they are spoken, so
+~ before any code is written the whole program is walked once for names.
+incant collect takes stmts, tongue
+  repeat s in stmts
+    let k be s at 0
+    if k is "splice"
+      call collect with (s at 1), (s at 2)
+    end
+    if k is "rite"
+      call collect with (s at 1), tongue
+    end
+    if k is "incant"
+      let name be s at 1
+      if (call find_fn with name) above -1
+        call die_at with ("an incantation named \"" add by name add by "\" was already spoken"), s at 4
+      end
+      set fn_names to fn_names add by (weave name)
+      set fn_arity to fn_arity add by (weave (count (s at 2)))
+      set fn_tongues to fn_tongues add by (weave (s at 5))
+    end
+    if k is "ward"
+      if ((s at 1) at 0) not "num"
+        call die_at with "a ward needs its vector written as a number", s at 3
+      end
+      set ward_vectors to ward_vectors add by (weave ((s at 1) at 1))
+    end
+    if k is "let" or k is "sigil"
+      if (call find_global with (s at 1)) is -1
+        let is_const be 0
+        if k is "sigil"
+          set is_const to 1
+        end
+        call add_global with (s at 1), (call bare_type with (s at 2)), tongue, is_const
+      end
+    end
+    if k is "foreach"
+      if (call find_global with (s at 1)) is -1
+        call add_global with (s at 1), "pulse", tongue, 0
+      end
+      call collect with (s at 3), tongue
+    end
+    if k is "if"
+      call collect with (s at 2), tongue
+      call collect with (s at 3), tongue
+    end
+    if k is "repeat" or k is "until"
+      call collect with (s at 2), tongue
+    end
+  end
+end
+
+~ ── pass 2: code ─────────────────────────────────────────────────────
+~ Functions and wards first (they may be spoken anywhere in the scroll), then
+~ one function, g_scroll, holding everything else in the order it was spoken.
+incant gen_decls takes stmts, tongue
+  repeat s in stmts
+    let k be s at 0
+    if k is "splice"
+      call gen_decls with (s at 1), (s at 2)
+    end
+    if k is "rite"
+      call gen_decls with (s at 1), tongue
+    end
+    if k is "incant"
+      call gen_incant with s
+    end
+    if k is "ward"
+      call gen_ward with s
+    end
+  end
+end
+
+incant gen_main_block takes stmts, tongue
+  repeat s in stmts
+    let k be s at 0
+    if k is "splice"
+      call gen_main_block with (s at 1), (s at 2)
+    else
+      if k is "rite"
+        call gen_main_block with (s at 1), tongue
+      else
+        if k is "incant" or k is "ward"
+          hush
+        else
+          set cur_tongue to tongue
+          call bare_stmt with s
+        end
+      end
+    end
+  end
+end
+
+incant gen_main takes program
+  call begin_function with "g_scroll", weave
+  set in_main to 1
+  call gen_main_block with program, "full"
+  set in_main to 0
+  call end_function
+end
+
+incant gen_globals
+  let i be 0
+  until i is count gl_names
+    call emit with "v_" add by (gl_names at i) add by ": dd 0"
+    rise i
+  end
+end
+
+~ ── the command line ─────────────────────────────────────────────────
+incant usage
+  speak "the machine heard no scroll to compile. usage: glossc [--target linux|kernel] [--home DIR] -o out.asm scroll.glo"
+  depart 1
+end
+
+let words be heed
+let input be ""
+let w_i be 0
+until w_i is count words
+  let word be words at w_i
+  if word is "--target"
+    rise w_i
+    set target to words at w_i
+  else
+    if word is "--home"
+      rise w_i
+      set home_dir to words at w_i
+    else
+      if word is "-o"
+        rise w_i
+        set out_path to words at w_i
+      else
+        set input to word
+      end
+    end
+  end
+  rise w_i
+end
+if input is "" or out_path is ""
+  call usage
+end
+
+~ words the target's hand-written glue provides (SPEC-BARE.md §7)
+if target is "linux"
+  set ext_names to weave "syscall"
+  set ext_arity to weave 4
+end
+if target is "kernel"
+  set ext_names to weave "hlt", "cli", "sti", "load_gdt", "load_idt", "switch_stacks"
+  set ext_arity to weave 0, 0, 0, 2, 2, 2
+end
+
+~ the runtime and the target's own scrolls come first, then the program
+let program be weave (call load_scroll with "rt/core", 0)
+set program to program add by (weave (call load_scroll with ("rt/target_" add by target), 0))
+set program to program add by (weave (call load_file with input, 0))
+
+call collect with program, "full"
+
+engrave "" to out_path
+call emit with "; written by glossc: one flat NASM file, assemble with nasm -f bin"
+call emit with "%include \"targets/" add by target add by ".asm\""
+call gen_decls with program, "full"
+call gen_main with program
+call emit with "section .data"
+call gen_globals
+call emit with "prog_end:"

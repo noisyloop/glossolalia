@@ -1,0 +1,46 @@
+~ tongue: bare
+~ inscribe and peek: little-endian memory in a rite
+~ (0x08100000 is scratch RAM on the Linux target; the interpreter simulates it)
+let base be 0x08100000
+rite
+  inscribe p32 0x11223344 at base
+  speak peek p8 base
+  speak peek p8 (base add by 3)
+  speak peek p16 base
+  speak peek p16 (base add by 2)
+  speak peek p32 base
+  inscribe p8 0xFF at (base add by 1)
+  speak peek p32 base
+  speak peek base
+  inscribe -2 at (base add by 8)
+  speak peek (base add by 8)
+  speak peek p32 (base add by 8)
+  inscribe p16 513 at (base add by 12)
+  speak peek p8 (base add by 12)
+  speak peek p8 (base add by 13)
+  let i be 0
+  repeat 10
+    inscribe p8 (i scale by i) at (base add by 100 add by i)
+    rise i
+  end
+  let sum be 0
+  set i to 0
+  until i is 10
+    add sum by (peek p8 (base add by 100 add by i))
+    rise i
+  end
+  speak sum
+  speak peek p8 (base add by 999)
+end
+
+~ an incantation spoken inside a rite may use the hardware words too
+rite
+  incant poke takes where, what
+    inscribe p8 what at where
+  end
+  incant look takes where
+    echo peek p8 where
+  end
+end
+call poke with 0x08100200, 77
+speak call look with 0x08100200

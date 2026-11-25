@@ -1,0 +1,16 @@
+~ tongue: bare
+~ kernel/test_sound.glo — milestone 4's self-test: two notes with a gap.
+~ The test records QEMU's speaker to a WAV file and measures the pitch.
+invoke "console"
+invoke "interrupts"
+invoke "speaker"
+
+call console_init
+call interrupts_init
+speak "tuning"
+burn 440 for 1200
+drift 600
+burn 880 for 1200
+drift 600
+speak "sound ok"
+depart 16

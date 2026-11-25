@@ -1,0 +1,36 @@
+~ tongue: bare
+~ kernel/idt.glo — the Interrupt Descriptor Table.
+~
+~ When the CPU is interrupted — by a fault such as dividing by zero, or by a
+~ device raising a line — it looks the event's number (its "vector") up in
+~ a table in memory, the IDT, and jumps to the code that entry names. There
+~ are 256 vectors, 8 bytes per entry. We fill in the ones we care about;
+~ an empty entry is "not present", and hitting one is a fatal fault.
+~
+~ An entry (an "interrupt gate") as two 32-bit words:
+~     low : handler address bits 15..0   | code selector 0x08 << 16
+~     high: handler address bits 31..16  | 0x8E00
+~ where 0x8E00 means: present, ring 0, 32-bit interrupt gate (which also
+~ clears the interrupt flag while the handler runs).
+~
+~ The handler for vector N is the stub the compiler writes for `ward N`;
+~ its address comes from the machine word `ward_addr N`.
+
+rite
+  let idt_base be 0x00010800
+
+  incant idt_init
+    let i be 0
+    until i is 512                 ~ 256 entries * 2 words: start all empty
+      inscribe p32 0 at idt_base add by (i scale by 4)
+      rise i
+    end
+    call load_idt with idt_base, 2047
+  end
+
+  incant idt_set takes vector, handler
+    let slot be idt_base add by (vector scale by 8)
+    inscribe p32 (call bor with (call band with handler, 0xFFFF), 0x00080000) at slot
+    inscribe p32 (call bor with (call band with handler, 0xFFFF0000), 0x8E00) at slot add by 4
+  end
+end

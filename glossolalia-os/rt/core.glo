@@ -1,0 +1,74 @@
+~ tongue: bare
+~ rt/core.glo — the runtime every compiled program carries.
+~
+~ The compiler turns `speak` into calls to these incantations. They are
+~ written in the bare tongue itself: all they need is memory, arithmetic,
+~ and two hooks the TARGET provides (rt/target_*.glo):
+~
+~     t_putc c      write one byte to the console
+~     t_exit code   stop
+~     t_drift ms    sleep (only needed by programs that use `drift`)
+~
+~ The compiler's own machine words (udiv, umod, say ...) are used freely
+~ here; see SPEC-BARE.md §7.
+
+rite
+  incant rt_putc takes c
+    call t_putc with c
+  end
+
+  ~ write n bytes starting at addr
+  incant rt_say takes addr, n
+    let i be 0
+    until i is n
+      call t_putc with (peek p8 (addr add by i))
+      rise i
+    end
+  end
+
+  incant rt_exit takes code
+    call t_exit with code
+  end
+
+  ~ speak a pulse and a newline.
+  ~   flavor 0: a plain pulse, signed       1: a sized pulse, unsigned
+  ~   flavor 2: a flicker, "true" or "false"
+  incant rt_speakn takes v, flavor
+    if flavor is 2
+      if v is 0
+        call say with "false"
+      else
+        call say with "true"
+      end
+      call t_putc with 10
+      void
+    end
+    let neg be 0
+    if flavor is 0 and v below 0
+      set neg to 1
+      set v to 0 subtract by v
+    end
+    ~ Peel off decimal digits, least significant first, into scratch memory;
+    ~ then print them backwards. (udiv/umod divide as unsigned, so the most
+    ~ negative number, which negates to itself, still comes out right.)
+    let n be 0
+    let more be 1
+    until more is 0
+      let d be call umod with v, 10
+      set v to call udiv with v, 10
+      inscribe p8 (48 add by d) at t_scratch add by 64 add by n
+      rise n
+      if v is 0
+        set more to 0
+      end
+    end
+    if neg is 1
+      call t_putc with 45
+    end
+    until n is 0
+      fall n
+      call t_putc with (peek p8 (t_scratch add by 64 add by n))
+    end
+    call t_putc with 10
+  end
+end

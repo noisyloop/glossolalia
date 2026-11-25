@@ -1,0 +1,705 @@
+~ parser.glo — hearing order in the words.
+~
+~ A hand-written recursive-descent parser for the whole of the tongue, the
+~ same grammar as the interpreter's (glo/parser.py), with the bare-tongue
+~ words (SPEC-BARE.md §3) read only inside a rite.
+~
+~ It builds the syntax tree out of strands. A node is a strand whose first
+~ element names its kind; the rest are its parts and, last, its line:
+~
+~   expressions                                     statements
+~   weave "num", n, line                            weave "speak", e, line
+~   weave "str", text, line                         weave "let", name, e, line
+~   weave "void", line                              weave "set", name, e, line
+~   weave "name", name, line                        weave "step", name, +1|-1, amount|void, line
+~   weave "call", name, args, line                  weave "mut", op, name, amount, line
+~   weave "strand", elements, line                  weave "if", cond, body, else, line
+~   weave "un", op, operand, line                   weave "repeat", count, body, line
+~   weave "bin", op, left, right, line              weave "foreach", name, iterable, body, line
+~   weave "peek", bits, address, line               weave "until", cond, body, line
+~   weave "listen", bits, port, line                weave "incant", name, params, body, line, tongue
+~   weave "heed", line                              weave "callstmt", name, args, line
+~                                                   weave "echo", e|void, line     (void = return nothing)
+~   a block is a strand of statements               weave "splice", statements, tongue, line  (an invoked scroll)
+~                                                   weave "rite", body, line
+~   weave "ward", vector, body, line                weave "inscribe", value, address, line
+~   weave "whisper", value, port, line              weave "engrave", value, path, append, line
+~   weave "depart", e|void, line                    weave "burn", freq, duration|void, line
+~   weave "drift", e|void, line                     weave "hush"|"silence"|"breathe"|"sync"|"retire", line
+~   weave "voice", name, body, line                 weave "sigil", name, e, line
+
+~ ── parser state ─────────────────────────────────────────────────────
+~ rite_depth: how many rites we are inside (hardware words are legal when > 0).
+~ stop_at:    1 while reading the value of "inscribe <value> at <address>",
+~             where the word "at" must end the value rather than index it.
+let rite_depth be 0
+let stop_at be 0
+let last_term be ""
+let scroll_dir be "."
+let home_dir be "."
+let invoked be weave
+
+let cast_words be weave "tone", "pulse", "glyph", "flicker"
+let prefix_words be weave "count", "ascend", "descend", "unweave", "bones", "flesh", "unseal"
+let starters be weave "NUMBER", "STRING", "NAME", "void", "call", "LPAREN", "not", "weave", "unweave", "count", "ascend", "descend", "fracture", "converge", "tone", "pulse", "glyph", "flicker", "heed", "bones", "flesh", "unseal"
+let not_yet be weave "open", "close", "send", "ritual", "remember", "forget", "chant"
+
+incant member takes x, lst
+  repeat y in lst
+    if y is x
+      echo 1
+    end
+  end
+  echo 0
+end
+
+incant advance
+  call next_token
+end
+
+incant skip_newlines
+  until tk not "NEWLINE"
+    call advance
+  end
+end
+
+~ how the machine names the word it just heard
+incant describe
+  if tk is "EOF"
+    echo "the end of the scroll"
+  end
+  if tk is "NEWLINE"
+    echo "the end of the line"
+  end
+  if tk is "NUMBER"
+    echo glyph tv
+  end
+  echo tv
+end
+
+incant end_statement
+  if tk is "EOF"
+    void
+  end
+  if tk is "NEWLINE"
+    call advance
+    void
+  end
+  call die_at with ("the machine heard more words than it expected: \"" add by (call describe) add by "\""), tl
+end
+
+incant expect takes t, what
+  if tk is t
+    let v be tv
+    call advance
+    echo v
+  end
+  call die_at with ("the machine expected " add by what add by " but heard \"" add by (call describe) add by "\""), tl
+end
+
+~ ── expressions ──────────────────────────────────────────────────────
+incant parse_expr
+  echo call parse_or
+end
+
+incant parse_or
+  let node be call parse_and
+  until tk not "or"
+    let ln be tl
+    call advance
+    set node to weave "bin", "or", node, (call parse_and), ln
+  end
+  echo node
+end
+
+incant parse_and
+  let node be call parse_compare
+  until tk not "and"
+    let ln be tl
+    call advance
+    set node to weave "bin", "and", node, (call parse_compare), ln
+  end
+  echo node
+end
+
+~ is / not (meaning "is not") / above / below
+incant parse_compare
+  let node be call parse_add
+  until not (tk is "is" or tk is "not" or tk is "above" or tk is "below")
+    let op be tk
+    let ln be tl
+    call advance
+    set node to weave "bin", op, node, (call parse_add), ln
+  end
+  echo node
+end
+
+~ postfix word operators:  a add by b   /   a subtract by b
+incant parse_add
+  let node be call parse_mul
+  let going be 1
+  until going is 0
+    set going to 0
+    if tk is "add" or tk is "subtract"
+      if (call peek_token) is "by"
+        let op be tk
+        let ln be tl
+        call advance
+        call advance
+        set node to weave "bin", op, node, (call parse_mul), ln
+        set going to 1
+      end
+    end
+  end
+  echo node
+end
+
+~ a scale by b   /   a modulate by b
+incant parse_mul
+  let node be call parse_unary
+  let going be 1
+  until going is 0
+    set going to 0
+    if tk is "scale" or tk is "modulate"
+      if (call peek_token) is "by"
+        let op be tk
+        let ln be tl
+        call advance
+        call advance
+        set node to weave "bin", op, node, (call parse_unary), ln
+        set going to 1
+      end
+    end
+  end
+  echo node
+end
+
+~ p8 / p16 / p32 are plain names to the lexer; the parser knows them as casts
+incant size_bits takes w
+  if w is "p8"
+    echo 8
+  end
+  if w is "p16"
+    echo 16
+  end
+  if w is "p32"
+    echo 32
+  end
+  echo 0
+end
+
+~ if the next word is p8/p16/p32, eat it and say how wide; else 0
+incant take_size
+  if tk is "NAME"
+    let bits be call size_bits with tv
+    if bits above 0
+      call advance
+      echo bits
+    end
+  end
+  echo 0
+end
+
+incant parse_unary
+  let ln be tl
+  let t be tk
+  if t is "not"
+    call advance
+    echo weave "un", "not", (call parse_unary), ln
+  end
+  if (call member with t, cast_words) or (call member with t, prefix_words)
+    call advance
+    echo weave "un", t, (call parse_unary), ln
+  end
+  if t is "NAME" and (call size_bits with tv) above 0
+    let w be tv
+    call advance
+    echo weave "un", w, (call parse_unary), ln
+  end
+  ~ peek / listen: ordinary names unless an operand follows (and then only in a rite)
+  if t is "NAME" and (tv is "peek" or tv is "listen") and (call member with (call peek_token), starters)
+    let w be tv
+    call advance
+    if rite_depth is 0
+      call die_at with ("the machine will not \"" add by w add by "\" outside a rite"), ln
+    end
+    if w is "peek"
+      let bits be call take_size
+      echo weave "peek", bits, (call parse_unary), ln
+    end
+    let width be call take_size
+    if width is 0
+      set width to 8
+    end
+    if tk not "NAME" or tv not "port"
+      call die_at with ("the machine expected \"port\" but heard \"" add by (call describe) add by "\""), tl
+    end
+    call advance
+    echo weave "listen", width, (call parse_unary), ln
+  end
+  if t is "fracture" or t is "converge"
+    call advance
+    let operand be call parse_unary
+    call expect with "by", "\"by\" and a separator"
+    echo weave "bin", t, operand, (call parse_unary), ln
+  end
+  echo call parse_postfix
+end
+
+~ indexing:  strand at 0   /   glyph at 2
+incant parse_postfix
+  let node be call parse_primary
+  until not (tk is "at" and stop_at is 0)
+    let ln be tl
+    call advance
+    set node to weave "bin", "at", node, (call parse_primary), ln
+  end
+  echo node
+end
+
+incant parse_call_args
+  let args be weave
+  if tk is "with"
+    call advance
+    set args to weave (call parse_expr)
+    until tk not "COMMA"
+      call advance
+      set args to args add by (weave (call parse_expr))
+    end
+  end
+  echo args
+end
+
+incant parse_primary
+  let ln be tl
+  let t be tk
+  if t is "weave"
+    call advance
+    let elems be weave
+    if call member with tk, starters
+      set elems to weave (call parse_expr)
+      until tk not "COMMA"
+        call advance
+        set elems to elems add by (weave (call parse_expr))
+      end
+    end
+    echo weave "strand", elems, ln
+  end
+  if t is "NUMBER"
+    let v be tv
+    call advance
+    echo weave "num", v, ln
+  end
+  if t is "STRING"
+    let v be tv
+    call advance
+    echo weave "str", v, ln
+  end
+  if t is "void"
+    call advance
+    echo weave "void", ln
+  end
+  if t is "NAME"
+    let v be tv
+    call advance
+    echo weave "name", v, ln
+  end
+  if t is "call"
+    call advance
+    let name be call expect with "NAME", "the name of an incantation"
+    echo weave "call", name, (call parse_call_args), ln
+  end
+  if t is "heed"
+    call advance
+    echo weave "heed", ln
+  end
+  if t is "LPAREN"
+    call advance
+    let saved be stop_at
+    set stop_at to 0
+    let node be call parse_expr
+    set stop_at to saved
+    call expect with "RPAREN", "a closing )"
+    echo node
+  end
+  call die_at with ("the machine expected a value but heard \"" add by (call describe) add by "\""), tl
+end
+
+~ ── statements ───────────────────────────────────────────────────────
+~ Statements until the terminator word t1 or t2; the one found is left in
+~ last_term and consumed.
+incant parse_block takes t1, t2
+  let body be weave
+  call skip_newlines
+  until tk is "EOF" or tk is t1 or tk is t2
+    set body to body add by (weave (call parse_statement))
+    call skip_newlines
+  end
+  if tk is "EOF"
+    let wanted be "\"" add by t1 add by "\""
+    if t1 not t2
+      set wanted to wanted add by " or \"" add by t2 add by "\""
+    end
+    call die_at with ("the machine waited for " add by wanted add by " but the scroll ended"), tl
+  end
+  set last_term to tk
+  call advance
+  echo body
+end
+
+incant parse_statement
+  let ln be tl
+  let t be tk
+
+  if call member with t, not_yet
+    call die_at with ("the compiler does not yet speak \"" add by t add by "\""), ln
+  end
+
+  if t is "speak"
+    call advance
+    let e be call parse_expr
+    call end_statement
+    echo weave "speak", e, ln
+  end
+  if t is "hush" or t is "silence" or t is "breathe" or t is "sync"
+    call advance
+    if t is "sync"
+      call expect with "voices", "\"voices\" after \"sync\""
+    end
+    call end_statement
+    echo weave t, ln
+  end
+  if t is "burn"
+    call advance
+    let freq be call parse_expr
+    let dur be void
+    if tk is "for"
+      call advance
+      set dur to call parse_expr
+    end
+    call end_statement
+    echo weave "burn", freq, dur, ln
+  end
+  if t is "drift"
+    call advance
+    let secs be void
+    if tk not "NEWLINE" and tk not "EOF"
+      set secs to call parse_expr
+    end
+    call end_statement
+    echo weave "drift", secs, ln
+  end
+  if t is "rise" or t is "fall"
+    call advance
+    let name be call expect with "NAME", "a name to change"
+    let amount be void
+    if tk is "by"
+      call advance
+      set amount to call parse_expr
+    end
+    call end_statement
+    let dir be 1
+    if t is "fall"
+      set dir to -1
+    end
+    echo weave "step", name, dir, amount, ln
+  end
+  if t is "add" or t is "subtract" or t is "scale" or t is "modulate"
+    call advance
+    let name be call expect with "NAME", "a name to change"
+    call expect with "by", "\"by\" and an amount"
+    let amount be call parse_expr
+    call end_statement
+    echo weave "mut", t, name, amount, ln
+  end
+  if t is "let" or t is "sigil"
+    call advance
+    let name be call expect with "NAME", "a name to bind"
+    call expect with "be", "\"be\" and a value"
+    let e be call parse_expr
+    call end_statement
+    echo weave t, name, e, ln
+  end
+  if t is "set"
+    call advance
+    let name be call expect with "NAME", "a name to set"
+    call expect with "to", "\"to\" and a value"
+    let e be call parse_expr
+    call end_statement
+    echo weave "set", name, e, ln
+  end
+  if t is "if"
+    call advance
+    let cond be call parse_expr
+    call end_statement
+    let body be call parse_block with "end", "else"
+    let other be weave
+    if last_term is "else"
+      call end_statement
+      set other to call parse_block with "end", "end"
+    end
+    call end_statement
+    echo weave "if", cond, body, other, ln
+  end
+  if t is "repeat"
+    call advance
+    if tk is "NAME" and (call peek_token) is "in"
+      let name be tv
+      call advance
+      call advance
+      let iter be call parse_expr
+      call end_statement
+      let body be call parse_block with "end", "end"
+      call end_statement
+      echo weave "foreach", name, iter, body, ln
+    end
+    let n be call parse_expr
+    call end_statement
+    let body be call parse_block with "end", "end"
+    call end_statement
+    echo weave "repeat", n, body, ln
+  end
+  if t is "until"
+    call advance
+    let cond be call parse_expr
+    call end_statement
+    let body be call parse_block with "end", "end"
+    call end_statement
+    echo weave "until", cond, body, ln
+  end
+  if t is "incant"
+    call advance
+    let name be call expect with "NAME", "a name for the incantation"
+    let params be weave
+    if tk is "takes"
+      call advance
+      set params to weave (call expect with "NAME", "a parameter name")
+      until not (tk is "COMMA" or tk is "and")
+        call advance
+        set params to params add by (weave (call expect with "NAME", "a parameter name"))
+      end
+    end
+    call end_statement
+    let body be call parse_block with "end", "end"
+    call end_statement
+    echo weave "incant", name, params, body, ln, scroll_tongue
+  end
+  if t is "call"
+    call advance
+    let name be call expect with "NAME", "the name of an incantation"
+    let args be call parse_call_args
+    call end_statement
+    echo weave "callstmt", name, args, ln
+  end
+  if t is "echo"
+    call advance
+    let e be void
+    if tk not "NEWLINE" and tk not "EOF"
+      set e to call parse_expr
+    end
+    call end_statement
+    echo weave "echo", e, ln
+  end
+  if t is "void"
+    call advance
+    call end_statement
+    echo weave "echo", void, ln
+  end
+  if t is "voice"
+    call advance
+    let name be call expect with "NAME", "a name for the voice"
+    call end_statement
+    let body be call parse_block with "end", "end"
+    call end_statement
+    echo weave "voice", name, body, ln
+  end
+  if t is "invoke"
+    call advance
+    let e be call parse_expr
+    call end_statement
+    if (e at 0) not "str"
+      call die_at with "the compiler can only invoke a scroll named by a glyph", ln
+    end
+    echo call load_scroll with (e at 1), ln
+  end
+  if t is "rite"
+    call advance
+    call end_statement
+    rise rite_depth
+    let body be call parse_block with "end", "end"
+    fall rite_depth
+    call end_statement
+    echo weave "rite", body, ln
+  end
+  if t is "ward"
+    call advance
+    let vec be call parse_expr
+    call end_statement
+    let body be call parse_block with "end", "end"
+    call end_statement
+    echo weave "ward", vec, body, ln
+  end
+  if t is "engrave"
+    call advance
+    let e be call parse_expr
+    let append be 0
+    if tk is "onto"
+      set append to 1
+      call advance
+    else
+      call expect with "to", "\"to\" or \"onto\" and a path"
+    end
+    let path be call parse_expr
+    call end_statement
+    echo weave "engrave", e, path, append, ln
+  end
+  if t is "depart"
+    call advance
+    let e be void
+    if tk not "NEWLINE" and tk not "EOF"
+      set e to call parse_expr
+    end
+    call end_statement
+    echo weave "depart", e, ln
+  end
+
+  ~ the hardware words: plain names to the lexer, statements only in a rite
+  if t is "NAME" and (tv is "inscribe" or tv is "whisper")
+    let w be tv
+    if rite_depth is 0
+      call die_at with ("the machine will not \"" add by w add by "\" outside a rite"), ln
+    end
+    call advance
+    if w is "inscribe"
+      let saved be stop_at
+      set stop_at to 1
+      let e be call parse_expr
+      set stop_at to saved
+      call expect with "at", "\"at\" and an address"
+      let addr be call parse_expr
+      call end_statement
+      echo weave "inscribe", e, addr, ln
+    end
+    let e be call parse_expr
+    call expect with "to", "\"to port\" and a port number"
+    if tk not "NAME" or tv not "port"
+      call die_at with ("the machine expected \"port\" but heard \"" add by (call describe) add by "\""), tl
+    end
+    call advance
+    let port be call parse_expr
+    call end_statement
+    echo weave "whisper", e, port, ln
+  end
+
+  call die_at with ("the machine did not understand \"" add by (call describe) add by "\""), ln
+end
+
+~ ── whole scrolls ────────────────────────────────────────────────────
+incant parse_program
+  let body be weave
+  call skip_newlines
+  until tk is "EOF"
+    set body to body add by (weave (call parse_statement))
+    call skip_newlines
+  end
+  echo body
+end
+
+incant ends_with takes a, suffix
+  let n be count a
+  let m be count suffix
+  if n below m
+    echo 0
+  end
+  let i be 0
+  until i is m
+    if (a at (n subtract by m add by i)) not (suffix at i)
+      echo 0
+    end
+    rise i
+  end
+  echo 1
+end
+
+~ everything before the last "/" ("." when there is none)
+incant dirname takes path
+  let raw be bones path
+  let i be count raw
+  until i is 0
+    fall i
+    if (raw at i) is 47
+      if i is 0
+        echo "/"
+      end
+      let out be weave
+      let j be 0
+      until j is i
+        set out to out add by (weave (raw at j))
+        rise j
+      end
+      echo flesh out
+    end
+  end
+  echo "."
+end
+
+~ "rt/heap" lives in the compiler's home; anything else beside the scroll
+~ that invokes it. ".glo" is added when missing.
+incant resolve_scroll takes name
+  let file be name
+  if not (call ends_with with name, ".glo")
+    set file to name add by ".glo"
+  end
+  if call starts_with with name, "rt/"
+    echo home_dir add by "/" add by file
+  end
+  echo scroll_dir add by "/" add by file
+end
+
+~ Bring another scroll in, the way the interpreter's invoke does: its
+~ statements join the program at this spot. Each scroll is read once.
+incant load_scroll takes name, ln
+  echo call load_file with (call resolve_scroll with name), ln
+end
+
+~ the same, for a path that is already worked out
+incant load_file takes path, ln
+  if call member with path, invoked
+    echo weave "splice", weave, "full", ln
+  end
+  set invoked to invoked add by (weave path)
+  ~ keep the lexer and parser exactly as they were; this scroll is a detour
+  let s_src be src
+  let s_len be src_len
+  let s_pos be pos
+  let s_line be line
+  let s_content be line_content
+  let s_tk be tk
+  let s_tv be tv
+  let s_tl be tl
+  let s_tongue be scroll_tongue
+  let s_seen be toks_seen
+  let s_dir be scroll_dir
+  let s_rite be rite_depth
+  let s_stop be stop_at
+  set scroll_dir to call dirname with path
+  set rite_depth to 0
+  set stop_at to 0
+  call lex_begin with (unseal path)
+  let tongue be scroll_tongue
+  let body be call parse_program
+  set src to s_src
+  set src_len to s_len
+  set pos to s_pos
+  set line to s_line
+  set line_content to s_content
+  set tk to s_tk
+  set tv to s_tv
+  set tl to s_tl
+  set scroll_tongue to s_tongue
+  set toks_seen to s_seen
+  set scroll_dir to s_dir
+  set rite_depth to s_rite
+  set stop_at to s_stop
+  echo weave "splice", body, tongue, ln
+end
