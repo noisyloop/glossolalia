@@ -11,6 +11,7 @@ invoke "console"
 invoke "keyboard"
 invoke "timer"
 invoke "speaker"
+invoke "agents"
 
 rite
   let line_buf be 0x00381000       ~ the line being typed (NUL-terminated)
@@ -126,6 +127,7 @@ rite
       speak "  silence          stop the tone"
       speak "  version          the OS version"
       speak "  choir            run three cooperative voices"
+      speak "  agents           coder, runner and checker agents (offline)"
       speak "  halt             stop the machine"
       void
     end
@@ -174,7 +176,11 @@ rite
       void
     end
     if call line_is with (call text_addr with "version"), (call text_len with "version")
-      speak "glossolalia-os 0.3.0"
+      speak "glossolalia-os 0.4.0"
+      void
+    end
+    if call line_is with (call text_addr with "agents"), (call text_len with "agents")
+      call agents_run
       void
     end
     if call line_is with (call text_addr with "choir"), (call text_len with "choir")

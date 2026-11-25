@@ -18,6 +18,23 @@ hush
 
 ---
 
+## see it run
+
+`glossolalia-os`: a small offline operating system written in Glossolalia,
+built by a compiler written in Glossolalia (which compiles itself). Boot the
+ISO from [`releases/`](releases/) in QEMU, no network needed.
+
+![the OS booting in QEMU: version, help, add 2 3, choir](docs/glossolalia-demo.gif)
+
+The `agents` command: three agents (coder, runner, checker) taking turns as
+cooperative voices. They are rule-based and deterministic, a small fixed set of
+behaviors rather than a learned model, so treat them as a demonstration of the
+loop, not intelligence.
+
+![the in-OS agents writing, running and checking programs](docs/glossolalia-agents.gif)
+
+---
+
 ## the first utterance
 
 ```
@@ -391,17 +408,16 @@ commands:
 
 The same text appears on the screen (VGA text mode) and on COM1.
 
-### Download the ISO (v0.3.0)
+### Download the ISO (v0.4.0)
 
-**[`releases/glossolalia-0.3.0.iso`](releases/glossolalia-0.3.0.iso)** (5 MB, i386, GRUB). Boot it offline:
+**[`releases/glossolalia-0.4.0.iso`](releases/glossolalia-0.4.0.iso)** (5 MB, i386, GRUB). Boot it offline:
 
 ```
-qemu-system-i386 -cdrom releases/glossolalia-0.3.0.iso -nic none
+qemu-system-i386 -cdrom releases/glossolalia-0.4.0.iso -nic none
 ```
 
-sha256 `b799a35dae2a4083a8495fd1e27121d235eb15aa1ff46e313ba1bf3cab448bce`. Try `version` and `choir` at the prompt.
+sha256 `c0507a3708440b84fa8c4a15eba8508b3e98046951d83617aaebefb9f33a297a`. Try `version`, `choir` and `agents` at the prompt.
 
-![glossolalia-os 0.3.0 booting in QEMU: version, help, add 2 3, choir](docs/glossolalia-demo.gif)
 
 ### Status
 
@@ -423,23 +439,23 @@ the bare tongue, compiled by a compiler written in Glossolalia (native since
 What changed in 0.3.0: the compiler compiles itself (stage 1 and stage 2 are
 byte-identical), so `make iso` needs only `bootstrap/glossc`, nasm and GRUB. Python is only the reference interpreter and the old test suite. Limit: pulses are 31-bit in the full tongue.
 
-### Planned: an OSC connector for AI agents (not built yet)
+### Agents inside the OS (v0.4.0)
 
-Idea: let an AI agent write Glossolalia by itself, over [OSC](https://opensoundcontrol.org/)
-(the same family of messages the tongue's sound side already speaks). The
-compiler is now one native binary (`bootstrap/glossc`) that needs no Python, so
-a small bridge can drive it directly:
+No network, no model: three small rule-based agents live in the kernel
+(`kernel/agents.glo`) as choir voices, passing a baton with `voice_yield`:
 
-| direction | OSC address | carries |
-|---|---|---|
-| agent → machine | `/glo/source` | `.glo` source text (and optionally `target`: `linux` or `kernel`) |
-| machine → agent | `/glo/error` | compile errors, in the machine's voice, with the line number |
-| machine → agent | `/glo/out` | what the compiled program printed |
-| machine → agent | `/glo/exit` | the program's exit status |
+| agent | job |
+|---|---|
+| `coder` | writes a one-line Glossolalia program into a shared buffer, e.g. `speak 7 scale by 3` |
+| `runner` | reads that text back with a tiny evaluator and prints the answer |
+| `checker` | works the answer out another way and says `ok` or `mismatch` |
 
-The loop an agent would run: send source, read `/glo/error`; if there is none,
-read `/glo/out` and `/glo/exit`, compare with what it expected, send a fix.
-`glossc` already exits 1 with a one-line error, and `tools/test_full.sh` already
-does the compile-run-compare step, so the bridge is mostly plumbing.
-Open questions: a sandbox and time limit for running untrusted programs, and
-whether `kernel` programs should boot in QEMU and stream COM1 back.
+Type `agents` at the prompt. They run six rounds (deterministic, seeded) and
+rest. `make test-agents` boots it headless and checks every round says `ok`.
+
+These are not language models (a model cannot fit in this OS); they are the
+observe, act, check loop in its smallest form. Next steps, in order of effort:
+let the coder emit more of the language, put `glossc` itself inside the OS
+(a GRUB-module ramdisk, the stretch milestone) so agents compile what they
+write, and, outside the OS, an MCP tool that drives `bootstrap/glossc` for
+external AI agents.
