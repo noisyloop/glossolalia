@@ -1,6 +1,6 @@
 """Milestone 1 — glossc v0 compiles the bare tongue.
 
-The parity suite: every program under examples/ runs twice,
+The parity suite: every program under examples/bare/ runs twice,
 
     1. on the reference interpreter (Python), and
     2. as a native Linux i386 binary, compiled by glossc (which is itself
@@ -16,7 +16,7 @@ import pytest
 
 from helpers import BUILD, ROOT, build_native, glossc, interpret, run
 
-EXAMPLES = sorted(glob.glob(os.path.join(ROOT, "examples", "*.glo")))
+EXAMPLES = sorted(glob.glob(os.path.join(ROOT, "examples", "bare", "*.glo")))
 
 
 def names():
@@ -37,16 +37,16 @@ def test_native_matches_interpreter(path):
 def test_machine_words_agree_with_their_reference_definitions():
     """bitops.glo invokes rt/bits (the slow reference). Strip that line and the
     compiler uses the one-instruction versions: same answers."""
-    src = open(os.path.join(ROOT, "examples", "bitops.glo")).read()
+    src = open(os.path.join(ROOT, "examples", "bare", "bitops.glo")).read()
     fast = os.path.join(BUILD, "bitops_fast.glo")
     open(fast, "w").write(src.replace('invoke "rt/bits"\n', ""))
-    expected = interpret(os.path.join(ROOT, "examples", "bitops.glo")).stdout
+    expected = interpret(os.path.join(ROOT, "examples", "bare", "bitops.glo")).stdout
     assert "invoke" not in open(fast).read()
     exe = build_native(fast, "bitops_fast")
     got = subprocess.run([exe], capture_output=True, text=True, timeout=20)
     assert got.stdout == expected
     # and the reference itself, compiled, agrees too
-    exe2 = build_native(os.path.join(ROOT, "examples", "bitops.glo"), "bitops_ref")
+    exe2 = build_native(os.path.join(ROOT, "examples", "bare", "bitops.glo"), "bitops_ref")
     got2 = subprocess.run([exe2], capture_output=True, text=True, timeout=20)
     assert got2.stdout == expected
 
