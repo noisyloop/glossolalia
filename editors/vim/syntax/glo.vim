@@ -17,6 +17,7 @@ syn match   gloEscape       contained "\\[nt\"\\]"
 " Numbers: tone (float) and pulse (int)
 syn match   gloTone         "\<-\=\d\+\.\d\+\>"
 syn match   gloPulse        "\<-\=\d\+\>"
+syn match   gloPulse        "\<0x\x\+\>"
 
 " Literals
 syn keyword gloConstant     true false void
@@ -24,7 +25,11 @@ syn keyword gloConstant     true false void
 " Commands (things that do)
 syn keyword gloCommand      speak hush burn rise fall drift breathe silence
 syn keyword gloCommand      open close channel send sync voices chant
-syn keyword gloCommand      remember forget
+syn keyword gloCommand      remember forget engrave depart
+
+" Bare tongue (SPEC-BARE.md): meaningful inside a rite
+syn keyword gloBare         inscribe peek whisper listen port rite ward
+syn keyword gloType         p8 p16 p32
 
 " Block / definition keywords
 syn keyword gloBlock        incant voice ritual invoke call takes end
@@ -40,13 +45,13 @@ syn keyword gloOperator     is not above below and or
 syn keyword gloOperator     add subtract scale modulate ascend descend
 
 " Strand & glyph craft
-syn keyword gloOperator     weave unweave count at fracture converge
+syn keyword gloOperator     weave unweave count at fracture converge bones flesh unseal heed
 
 " Types
 syn keyword gloType         tone pulse glyph flicker sigil
 
 " Structure words
-syn keyword gloStructure    let be set to by with for as
+syn keyword gloStructure    let be set to onto by with for as
 
 " Name following a definition keyword
 syn match   gloFuncName     contained "\<[A-Za-z_][A-Za-z0-9_]*\>"
@@ -58,6 +63,7 @@ hi def link gloTone         Float
 hi def link gloPulse        Number
 hi def link gloConstant     Constant
 hi def link gloCommand      Function
+hi def link gloBare         Function
 hi def link gloBlock        Keyword
 hi def link gloControl      Conditional
 hi def link gloOperator     Operator
