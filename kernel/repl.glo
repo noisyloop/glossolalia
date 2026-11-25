@@ -94,6 +94,22 @@ rite
     echo value
   end
 
+  let choir_ready be 0
+
+  incant alto
+    speak "  alto sings"
+    call voice_yield
+    speak "  alto sings again"
+    call voice_yield
+  end
+
+  incant bass
+    speak "  bass hums"
+    call voice_yield
+    speak "  bass hums again"
+    call voice_yield
+  end
+
   incant run_command
     if line_len is 0
       void
@@ -108,6 +124,8 @@ rite
       speak "  uptime           seconds since boot"
       speak "  burn <hz> [ms]   sound a tone (until silence, or for ms)"
       speak "  silence          stop the tone"
+      speak "  version          the OS version"
+      speak "  choir            run three cooperative voices"
       speak "  halt             stop the machine"
       void
     end
@@ -153,6 +171,23 @@ rite
     end
     if call line_is with (call text_addr with "silence"), (call text_len with "silence")
       silence
+      void
+    end
+    if call line_is with (call text_addr with "version"), (call text_len with "version")
+      speak "glossolalia-os 0.2.0"
+      void
+    end
+    if call line_is with (call text_addr with "choir"), (call text_len with "choir")
+      if choir_ready is 0
+        call voice_spawn with (call fn_addr with alto)
+        call voice_spawn with (call fn_addr with bass)
+        set choir_ready to 1
+      end
+      speak "  main listens"
+      call voice_yield
+      call voice_yield
+      call voice_yield
+      speak "  the choir rests"
       void
     end
     if call line_is with (call text_addr with "halt"), (call text_len with "halt")

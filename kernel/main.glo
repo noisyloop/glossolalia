@@ -4,10 +4,12 @@
 ~ below run, top to bottom, exactly as in any scroll.
 invoke "console"
 invoke "interrupts"
+invoke "rt/choir"
 invoke "repl"
 
 call console_init
-speak "glossolalia-os"
+call heap_init with 0x00400000, 0x04000000
+speak "glossolalia-os 0.2.0"
 speak "the machine listens."
 call interrupts_init
 call repl
