@@ -1,0 +1,10 @@
+~ tongue: bare
+~ kernel/test_agents.glo — the in-OS agents, run without a keyboard.
+invoke "console"
+invoke "agents"
+
+call console_init
+call heap_init with 0x00400000, 0x04000000
+call agents_run
+speak "agents ok"
+depart 16

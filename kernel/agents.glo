@@ -1,0 +1,169 @@
+~ tongue: bare
+~ kernel/agents.glo — three rule-based agents living inside the OS, no network.
+~
+~ Each agent is a choir voice (rt/choir.glo) running an observe -> act loop and
+~ passing a baton by `ag_state`:
+~
+~   coder    writes a one-line program into a shared buffer, e.g. "speak 7 scale by 3"
+~   runner   reads that text back with a tiny evaluator and prints the answer
+~   checker  works the answer out another way and says ok or mismatch
+~
+~ They take turns with voice_yield. Not an AI model: a small, deterministic
+~ society of programs that write, run and check Glossolalia on the machine.
+invoke "rt/choir"
+
+rite
+  let ag_buf be 0x003D0000
+  let ag_active be 0
+  let ag_state be 0
+  let ag_round be 0
+  let ag_rounds be 6
+  let ag_seed be 7
+  let ag_a be 0
+  let ag_b be 0
+  let ag_op be 0
+  let ag_result be 0
+  let agents_ready be 0
+
+  incant ag_put_text takes p, addr, n
+    let i be 0
+    until i is n
+      inscribe p8 (peek p8 (addr add by i)) at (p add by i)
+      rise i
+    end
+    echo p add by n
+  end
+
+  incant ag_put_num takes p, v
+    if v above 9
+      inscribe p8 (48 add by (call udiv with v, 10)) at p
+      set p to p add by 1
+    end
+    inscribe p8 (48 add by (call umod with v, 10)) at p
+    echo p add by 1
+  end
+
+  incant ag_print takes p
+    let c be peek p8 p
+    until c is 0
+      call t_putc with c
+      set p to p add by 1
+      set c to peek p8 p
+    end
+    call t_putc with 10
+  end
+
+  incant ag_compute takes a, b, op
+    if op is 0
+      echo a add by b
+    end
+    if op is 1
+      echo a subtract by b
+    end
+    echo a scale by b
+  end
+
+  ~ read a number from the text at p; leaves the next position in ag_end
+  let ag_end be 0
+  incant ag_read_num takes p
+    let v be 0
+    until (peek p8 p) above 47 and (peek p8 p) below 58
+      set p to p add by 1
+    end
+    until (peek p8 p) below 48 or (peek p8 p) above 57
+      set v to (v scale by 10) add by ((peek p8 p) subtract by 48)
+      set p to p add by 1
+    end
+    set ag_end to p
+    echo v
+  end
+
+  incant agent_coder
+    until 0
+      if ag_active is 1 and ag_state is 0
+        set ag_seed to ((ag_seed scale by 1103) add by 12345) modulate by 65536
+        set ag_a to (call umod with (call shr with ag_seed, 4), 9) add by 1
+        set ag_b to (call umod with (call shr with ag_seed, 7), 9) add by 1
+        set ag_op to call umod with (call shr with ag_seed, 11), 3
+        let p be call ag_put_text with ag_buf, (call text_addr with "speak "), (call text_len with "speak ")
+        set p to call ag_put_num with p, ag_a
+        if ag_op is 0
+          set p to call ag_put_text with p, (call text_addr with " add by "), (call text_len with " add by ")
+        end
+        if ag_op is 1
+          set p to call ag_put_text with p, (call text_addr with " subtract by "), (call text_len with " subtract by ")
+        end
+        if ag_op is 2
+          set p to call ag_put_text with p, (call text_addr with " scale by "), (call text_len with " scale by ")
+        end
+        set p to call ag_put_num with p, ag_b
+        inscribe p8 0 at p
+        call say with "coder:   "
+        call ag_print with ag_buf
+        set ag_state to 1
+      end
+      call voice_yield
+    end
+  end
+
+  ~ the evaluator: "speak <n> <add|subtract|scale> by <m>"
+  incant agent_runner
+    until 0
+      if ag_active is 1 and ag_state is 1
+        let a be call ag_read_num with (ag_buf add by 5)
+        let q be ag_end
+        let word be peek p8 (q add by 1)
+        let op be 2
+        if word is 97
+          set op to 0
+        end
+        if word is 115 and (peek p8 (q add by 2)) is 117
+          set op to 1
+        end
+        ~ skip to "by" and read the second number
+        let b be call ag_read_num with (q add by 3)
+        set ag_result to call ag_compute with a, b, op
+        call say with "runner:  "
+        speak ag_result
+        set ag_state to 2
+      end
+      call voice_yield
+    end
+  end
+
+  incant agent_checker
+    until 0
+      if ag_active is 1 and ag_state is 2
+        call say with "checker: "
+        if ag_result is (call ag_compute with ag_a, ag_b, ag_op)
+          speak "ok"
+        else
+          speak "mismatch"
+        end
+        rise ag_round
+        set ag_state to 0
+        if ag_round is ag_rounds
+          set ag_active to 0
+        end
+      end
+      call voice_yield
+    end
+  end
+
+  ~ wake the agents (spawned once) and let them work until their rounds are done
+  incant agents_run
+    if agents_ready is 0
+      call voice_spawn with (call fn_addr with agent_coder)
+      call voice_spawn with (call fn_addr with agent_runner)
+      call voice_spawn with (call fn_addr with agent_checker)
+      set agents_ready to 1
+    end
+    set ag_round to 0
+    set ag_state to 0
+    set ag_active to 1
+    until ag_active is 0
+      call voice_yield
+    end
+    speak "the agents rest."
+  end
+end

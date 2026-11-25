@@ -21,7 +21,7 @@ RUNTIME  := $(wildcard rt/*.glo)
 GLUE     := $(wildcard targets/*.asm)
 
 .DELETE_ON_ERROR:
-.PHONY: all iso run test test-interpreter test-compiler test-boot selfhost bootstrap test-full clean
+.PHONY: all iso run test test-interpreter test-compiler test-boot selfhost bootstrap test-full test-agents clean
 all: iso
 
 # ---- building a kernel: scroll -> NASM -> flat binary -> bootable ISO -------
@@ -75,10 +75,13 @@ test-compiler:
 test-boot:
 	$(PY) -m pytest -q ostests/test_boot.py ostests/test_interrupts.py ostests/test_sound.py ostests/test_choir.py
 
+test-agents:
+	sh tools/test_agents.sh
+
 test-full:
 	sh tools/test_full.sh
 
-test: test-interpreter test-compiler test-full test-boot
+test: test-interpreter test-compiler test-full test-agents test-boot
 
 clean:
 	rm -rf build

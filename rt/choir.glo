@@ -19,7 +19,7 @@ rite
   ~ start a voice at an incantation; returns its number
   incant voice_spawn takes entry
     let id be voice_count
-    let top be (call heap_alloc with 4096) add by 4096
+    let top be (call heap_alloc with 8192) add by 8192
     let sp be top subtract by 24
     inscribe p32 0 at sp
     inscribe p32 0 at (sp add by 4)
