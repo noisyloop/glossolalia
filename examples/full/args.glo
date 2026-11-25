@@ -1,0 +1,6 @@
+let words be heed
+speak count words
+repeat w in words
+  speak w add by "!"
+end
+speak "done"

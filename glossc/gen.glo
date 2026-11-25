@@ -861,7 +861,11 @@ end
 incant gen_incant takes s
   set cur_tongue to s at 5
   call begin_function with ("g_" add by (s at 1)), (s at 2)
-  call bare_block with (s at 3)
+  if (s at 5) is "bare"
+    call bare_block with (s at 3)
+  else
+    call full_block with (s at 3)
+  end
   call end_function
 end
 

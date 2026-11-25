@@ -9,7 +9,7 @@ invoke "repl"
 
 call console_init
 call heap_init with 0x00400000, 0x04000000
-speak "glossolalia-os 0.2.0"
+speak "glossolalia-os 0.3.0"
 speak "the machine listens."
 call interrupts_init
 call repl

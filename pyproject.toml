@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "glossolalia"
-version = "0.2.0"
+version = "0.3.0"
 description = "A real, interpreted programming language whose syntax reads like incantation."
 readme = "README.md"
 requires-python = ">=3.9"

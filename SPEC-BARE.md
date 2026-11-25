@@ -5,11 +5,11 @@
 
 > *The bare tongue speaks to the machine. The full tongue speaks through it.*
 
-> **Implementation status.** The bare tongue, `rite`, `ward`, the machine words,
-> both targets and `burn`/`drift` are implemented and tested (milestones 0-4).
-> The **full tongue's compiled form** (§1, §6.2, §6.3: tagged values, glyphs and
-> strands, the heap, voices) is the *design* for milestones 5-7, which are not
-> built yet. The interpreter already runs the full tongue.
+> **Implementation status (v0.3.0).** Milestones 0-7 are built: the bare tongue,
+> `rite`, `ward`, the machine words, both targets, `burn`/`drift`, the full tongue's compiled form
+> (§6.2, §6.3: tagged values, glyphs, strands, the heap) and self-hosting. Voices exist as a
+> library (rt/choir.glo: voice_spawn, voice_yield); the voice/breathe syntax is still design.
+> The compiled full tongue has no tones, rituals or channels.
 
 v0.1 describes a language that lives on top of Python: unbounded integers,
 garbage-collected strings and lists, threads, a sound card. An operating

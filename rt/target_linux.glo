@@ -20,6 +20,39 @@ rite
     call syscall with 1, code, 0, 0
   end
 
+  ~ files, for the full tongue's unseal and engrave (system calls 5, 6, 3, 4, 19)
+  incant t_open takes path, flags
+    echo call syscall with 5, path, flags, 420
+  end
+  incant t_close takes fd
+    echo call syscall with 6, fd, 0, 0
+  end
+  incant t_read takes fd, buf, n
+    echo call syscall with 3, fd, buf, n
+  end
+  incant t_write takes fd, buf, n
+    echo call syscall with 4, fd, buf, n
+  end
+  incant t_seek takes fd, off, whence
+    echo call syscall with 19, fd, off, whence
+  end
+
+  ~ the command line: _start saved the initial stack pointer at t_scratch+2048
+  incant t_argc
+    echo peek p32 (peek p32 (t_scratch add by 2048))
+  end
+  incant t_arg takes i
+    echo peek p32 ((peek p32 (t_scratch add by 2048)) add by (4 add by (i scale by 4)))
+  end
+
+  ~ the heap of the full tongue (linux.asm reserves 256 MiB)
+  incant t_heap_base
+    echo 0x08400000
+  end
+  incant t_heap_end
+    echo 0x18000000
+  end
+
   ~ There is no speaker to drive from a normal process: tones are silent here
   ~ (the interpreter likewise only draws them on stderr), so the same program
   ~ prints the same text on both.

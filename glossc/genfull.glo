@@ -1,0 +1,487 @@
+~ genfull.glo — the full tongue's back end (milestone 5).
+~
+~ Same plain stack machine as gen.glo, but every value is a tagged word
+~ (SPEC-BARE.md §6.2): odd = pulse (n*2+1), 0 = void, 4 = false, 8 = true,
+~ anything else = a pointer to a glyph or strand object. The work is done by
+~ rt/full.glo, which the generated code calls with tagged words.
+
+~ a static glyph object in the data section: {kind 1, length, data, 0} + bytes
+incant full_text_label takes text
+  rise text_n
+  let lbl be "S" add by text_n
+  let raw be bones text
+  call emit with "section .data"
+  call emit with "align 16"
+  call emit with lbl add by ": dd 1, " add by (count raw) add by ", " add by lbl add by "d, 0"
+  call emit with lbl add by "d:"
+  let i be 0
+  let row be ""
+  let in_row be 0
+  until i is count raw
+    if in_row is 0
+      set row to "  db " add by (raw at i)
+    else
+      set row to row add by "," add by (raw at i)
+    end
+    rise in_row
+    rise i
+    if in_row is 16 or i is count raw
+      call emit with row
+      set in_row to 0
+    end
+  end
+  call emit with "  db 0"
+  call emit with "section .text"
+  echo lbl
+end
+
+~ call a runtime helper whose arguments are already pushed
+incant full_rt takes name, nargs
+  call emit with "  call g_" add by name
+  call emit with "  add esp, " add by (4 scale by nargs)
+end
+
+~ EAX = helper(EAX)
+incant full_rt1 takes name
+  call emit with "  push eax"
+  call full_rt with name, 1
+end
+
+~ EAX = helper(left, right) where the left is in EAX and the right in EBX
+incant full_rt2 takes name
+  call emit with "  push eax"
+  call emit with "  push ebx"
+  call full_rt with name, 2
+end
+
+~ EAX holds a flicker made from the flags of the last compare: 1 -> true (8), 0 -> false (4)
+incant full_to_flicker
+  call emit with "  lea eax, [ecx*4+4]"
+end
+
+~ ── expressions ──────────────────────────────────────────────────────
+incant full_expr takes e
+  let k be e at 0
+  if k is "num"
+    call emit with "  mov eax, " add by (((e at 1) scale by 2) add by 1)
+    void
+  end
+  if k is "name"
+    call emit with "  mov eax, " add by (call lookup_loc with (e at 1), (e at 2))
+    void
+  end
+  if k is "void"
+    call emit with "  xor eax, eax"
+    void
+  end
+  if k is "str"
+    call emit with "  mov eax, " add by (call full_text_label with (e at 1))
+    void
+  end
+  if k is "heed"
+    call emit with "  call g_rtf_heed"
+    void
+  end
+  if k is "strand"
+    call full_strand with e
+    void
+  end
+  if k is "call"
+    call full_call with (e at 1), (e at 2), (e at 3)
+    void
+  end
+  if k is "un"
+    call full_unary with e
+    void
+  end
+  if k is "bin"
+    call full_binary with e
+    void
+  end
+  call die_at with "the full tongue cannot compile such a word yet", e at (count e subtract by 1)
+end
+
+incant full_strand takes e
+  let slot be call new_temp
+  call emit with "  push " add by (count (e at 1))
+  call full_rt with "rtf_weave_new", 1
+  call emit with "  mov " add by slot add by ", eax"
+  let i be 0
+  repeat el in (e at 1)
+    call full_expr with el
+    call emit with "  mov ebx, eax"
+    call emit with "  push dword " add by slot
+    call emit with "  push " add by i
+    call emit with "  push ebx"
+    call full_rt with "rtf_weave_set", 3
+    rise i
+  end
+  call emit with "  mov eax, " add by slot
+end
+
+incant full_unary takes e
+  let op be e at 1
+  let ln be e at 3
+  if op is "tone" or op is "ascend" or op is "descend" or op is "unweave"
+    call die_at with ("the compiler does not yet speak \"" add by op add by "\""), ln
+  end
+  call full_expr with (e at 2)
+  if op is "not"
+    call full_rt1 with "rtf_truthy"
+    call emit with "  xor ecx, ecx"
+    call emit with "  test eax, eax"
+    call emit with "  sete cl"
+    call full_to_flicker
+    void
+  end
+  if op is "flicker"
+    call full_rt1 with "rtf_truthy"
+    call emit with "  mov ecx, eax"
+    call full_to_flicker
+    void
+  end
+  if op is "count"
+    call full_rt1 with "rtf_count"
+    void
+  end
+  if op is "bones"
+    call full_rt1 with "rtf_bones"
+    void
+  end
+  if op is "flesh"
+    call full_rt1 with "rtf_flesh"
+    void
+  end
+  if op is "unseal"
+    call full_rt1 with "rtf_unseal"
+    void
+  end
+  if op is "glyph"
+    call full_rt1 with "rtf_totext"
+    void
+  end
+  if op is "pulse"
+    void
+  end
+  call die_at with ("the compiler does not yet speak \"" add by op add by "\""), ln
+end
+
+incant full_binary takes e
+  let op be e at 1
+  let ln be e at 4
+  if op is "and"
+    let lf be call new_label
+    let le be call new_label
+    call full_expr with (e at 2)
+    call full_rt1 with "rtf_truthy"
+    call emit with "  test eax, eax"
+    call emit with "  jz " add by lf
+    call full_expr with (e at 3)
+    call full_rt1 with "rtf_truthy"
+    call emit with "  test eax, eax"
+    call emit with "  jz " add by lf
+    call emit with "  mov eax, 8"
+    call emit with "  jmp " add by le
+    call emit with lf add by ":"
+    call emit with "  mov eax, 4"
+    call emit with le add by ":"
+    void
+  end
+  if op is "or"
+    let lt be call new_label
+    let le be call new_label
+    call full_expr with (e at 2)
+    call full_rt1 with "rtf_truthy"
+    call emit with "  test eax, eax"
+    call emit with "  jnz " add by lt
+    call full_expr with (e at 3)
+    call full_rt1 with "rtf_truthy"
+    call emit with "  test eax, eax"
+    call emit with "  jnz " add by lt
+    call emit with "  mov eax, 4"
+    call emit with "  jmp " add by le
+    call emit with lt add by ":"
+    call emit with "  mov eax, 8"
+    call emit with le add by ":"
+    void
+  end
+  if op is "fracture" or op is "converge"
+    call die_at with ("the compiler does not yet speak \"" add by op add by "\""), ln
+  end
+  call full_expr with (e at 2)
+  call emit with "  push eax"
+  call full_expr with (e at 3)
+  call emit with "  mov ebx, eax"
+  call emit with "  pop eax"
+  call full_op with op
+end
+
+~ EAX = EAX <op> EBX, on tagged words
+incant full_op takes op
+  if op is "add"
+    call full_rt2 with "rtf_add"
+    void
+  end
+  if op is "subtract"
+    call full_rt2 with "rtf_sub"
+    void
+  end
+  if op is "scale"
+    call full_rt2 with "rtf_mul"
+    void
+  end
+  if op is "modulate"
+    call full_rt2 with "rtf_mod"
+    void
+  end
+  if op is "at"
+    call full_rt2 with "rtf_at"
+    void
+  end
+  if op is "is"
+    call full_rt2 with "rtf_eq"
+    void
+  end
+  if op is "not"
+    call full_rt2 with "rtf_eq"
+    call emit with "  xor ecx, ecx"
+    call emit with "  cmp eax, 4"
+    call emit with "  sete cl"
+    call full_to_flicker
+    void
+  end
+  ~ above / below: tagged pulses keep their order, so compare the words
+  call emit with "  xor ecx, ecx"
+  call emit with "  cmp eax, ebx"
+  if op is "above"
+    call emit with "  setg cl"
+  end
+  if op is "below"
+    call emit with "  setl cl"
+  end
+  call full_to_flicker
+end
+
+~ ── calls ────────────────────────────────────────────────────────────
+incant full_call takes name, args, ln
+  let f be call find_fn with name
+  if f is -1
+    call die_at with ("an incantation named \"" add by name add by "\" has not been spoken yet"), ln
+  end
+  if (fn_arity at f) not (count args)
+    call die_at with ("the incantation \"" add by name add by "\" takes " add by (fn_arity at f) add by " but was given " add by (count args)), ln
+  end
+  let bare be (fn_tongues at f) is "bare"
+  repeat a in args
+    call full_expr with a
+    if bare
+      ~ a bare incantation wants plain numbers: drop the tag
+      call emit with "  sar eax, 1"
+    end
+    call emit with "  push eax"
+  end
+  call emit with "  call g_" add by name
+  if count args above 0
+    call emit with "  add esp, " add by (4 scale by count args)
+  end
+  if bare
+    call emit with "  lea eax, [eax*2+1]"
+  end
+end
+
+~ ── statements ───────────────────────────────────────────────────────
+incant full_block takes body
+  repeat s in body
+    call full_stmt with s
+  end
+end
+
+incant full_store takes name, ln
+  call check_not_sigil with name, ln
+  call emit with "  mov " add by (call lookup_loc with name, ln) add by ", eax"
+end
+
+incant full_stmt takes s
+  let k be s at 0
+  if k is "hush"
+    void
+  end
+  if k is "speak"
+    call full_expr with (s at 1)
+    call full_rt1 with "rtf_speak"
+    void
+  end
+  if k is "let" or k is "sigil"
+    call full_expr with (s at 2)
+    if in_main is 1
+      let g be call find_global with (s at 1)
+      if g is -1
+        call add_global with (s at 1), "full", cur_tongue, 0
+      end
+      call emit with "  mov [v_" add by (s at 1) add by "], eax"
+    else
+      let loc be call declare_local with (s at 1), "full"
+      call emit with "  mov " add by loc add by ", eax"
+    end
+    void
+  end
+  if k is "set"
+    call full_expr with (s at 2)
+    call full_store with (s at 1), (s at 3)
+    void
+  end
+  if k is "step" or k is "mut"
+    let name be s at 1
+    let amount be s at 3
+    let op be s at 2
+    let ln be s at 4
+    if k is "mut"
+      set name to s at 2
+      set op to s at 1
+      set amount to s at 3
+      set ln to s at 4
+    else
+      set op to "add"
+      if (s at 2) is -1
+        set op to "subtract"
+      end
+    end
+    if amount is void
+      call emit with "  mov eax, 3"
+    else
+      call full_expr with amount
+    end
+    call emit with "  mov ebx, eax"
+    call emit with "  mov eax, " add by (call lookup_loc with name, ln)
+    call full_op with op
+    call full_store with name, ln
+    void
+  end
+  if k is "if"
+    let lelse be call new_label
+    let lend be call new_label
+    call full_expr with (s at 1)
+    call full_rt1 with "rtf_truthy"
+    call emit with "  test eax, eax"
+    call emit with "  jz " add by lelse
+    call full_block with (s at 2)
+    call emit with "  jmp " add by lend
+    call emit with lelse add by ":"
+    call full_block with (s at 3)
+    call emit with lend add by ":"
+    void
+  end
+  if k is "repeat"
+    let ltop be call new_label
+    let lend be call new_label
+    let slot be call new_temp
+    call full_expr with (s at 1)
+    call emit with "  sar eax, 1"
+    call emit with "  mov " add by slot add by ", eax"
+    call emit with ltop add by ":"
+    call emit with "  cmp dword " add by slot add by ", 0"
+    call emit with "  jle " add by lend
+    call full_block with (s at 2)
+    call emit with "  dec dword " add by slot
+    call emit with "  jmp " add by ltop
+    call emit with lend add by ":"
+    void
+  end
+  if k is "until"
+    let ltop be call new_label
+    let lend be call new_label
+    call emit with ltop add by ":"
+    call full_expr with (s at 1)
+    call full_rt1 with "rtf_truthy"
+    call emit with "  test eax, eax"
+    call emit with "  jnz " add by lend
+    call full_block with (s at 2)
+    call emit with "  jmp " add by ltop
+    call emit with lend add by ":"
+    void
+  end
+  if k is "foreach"
+    call full_foreach with s
+    void
+  end
+  if k is "callstmt"
+    call full_call with (s at 1), (s at 2), (s at 3)
+    void
+  end
+  if k is "echo"
+    if (s at 1) is void
+      call emit with "  xor eax, eax"
+    else
+      call full_expr with (s at 1)
+    end
+    call emit with "  jmp X" add by fn_id
+    void
+  end
+  if k is "depart"
+    if (s at 1) is void
+      call emit with "  xor eax, eax"
+    else
+      call full_expr with (s at 1)
+      call emit with "  sar eax, 1"
+    end
+    call emit with "  push eax"
+    call emit with "  call g_rt_exit"
+    call emit with "  add esp, 4"
+    void
+  end
+  if k is "engrave"
+    ~ engrave: value, path, append, line
+    call full_expr with (s at 1)
+    call emit with "  push eax"
+    call full_expr with (s at 2)
+    call emit with "  push eax"
+    call emit with "  push " add by (s at 3)
+    call full_rt with "rtf_engrave", 3
+    void
+  end
+  if k is "rite"
+    call bare_block with (s at 1)
+    void
+  end
+  if k is "incant" or k is "ward"
+    call die_at with "an incantation must be spoken at the top of a scroll", s at (count s subtract by 2)
+  end
+  call not_yet_spoken with k, s at (count s subtract by 1)
+end
+
+~ repeat <name> in <iterable> ... end
+incant full_foreach takes s
+  let ltop be call new_label
+  let lend be call new_label
+  let name be s at 1
+  let seq be call new_temp
+  let idx be call new_temp
+  let total be call new_temp
+  call full_expr with (s at 2)
+  call emit with "  mov " add by seq add by ", eax"
+  call full_rt1 with "rtf_count"
+  call emit with "  sar eax, 1"
+  call emit with "  mov " add by total add by ", eax"
+  call emit with "  mov dword " add by idx add by ", 0"
+  call emit with ltop add by ":"
+  call emit with "  mov eax, " add by idx
+  call emit with "  cmp eax, " add by total
+  call emit with "  jge " add by lend
+  call emit with "  lea eax, [eax*2+1]"
+  call emit with "  push dword " add by seq
+  call emit with "  push eax"
+  call full_rt with "rtf_at", 2
+  if in_main is 1
+    if (call find_global with name) is -1
+      call add_global with name, "full", cur_tongue, 0
+    end
+    call emit with "  mov [v_" add by name add by "], eax"
+  else
+    let loc be call declare_local with name, "full"
+    call emit with "  mov " add by loc add by ", eax"
+  end
+  call full_block with (s at 3)
+  call emit with "  inc dword " add by idx
+  call emit with "  jmp " add by ltop
+  call emit with lend add by ":"
+end

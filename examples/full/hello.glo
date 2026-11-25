@@ -1,0 +1,28 @@
+speak "hello, full tongue"
+let n be 41
+rise n
+speak n
+let words be weave "a", "b", "c"
+let out be ""
+repeat w in words
+  set out to out add by w add by "-"
+end
+speak out
+speak count words
+speak (words at 1) is "b"
+speak "n=" add by n add by "!"
+incant fib takes k
+  if k below 2
+    echo k
+  end
+  echo (call fib with (k subtract by 1)) add by (call fib with (k subtract by 2))
+end
+speak call fib with 15
+let i be 0
+let acc be weave
+until i is 5
+  set acc to acc add by (weave (i scale by i))
+  rise i
+end
+speak acc at 4
+speak (flesh (bones "xyz")) add by "!"
