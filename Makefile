@@ -61,7 +61,7 @@ test-compiler:
 # Headless boots: -display none, COM1 on stdout, isa-debug-exit for the
 # verdict, and a timeout on every run.
 test-boot:
-	$(PY) -m pytest -q ostests/test_boot.py ostests/test_interrupts.py ostests/test_sound.py
+	$(PY) -m pytest -q ostests/test_boot.py ostests/test_interrupts.py ostests/test_sound.py ostests/test_choir.py
 
 test: test-interpreter test-compiler test-boot
 

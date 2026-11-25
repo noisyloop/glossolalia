@@ -76,8 +76,8 @@ let lc_max be 0
 let cur_tongue be "full"
 let in_main be 0
 
-let int_names be weave "shl", "shr", "sar", "band", "bor", "bxor", "udiv", "umod", "sdiv", "say", "text_addr", "text_len", "ward_addr"
-let int_arity be weave 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1, 1, 1
+let int_names be weave "shl", "shr", "sar", "band", "bor", "bxor", "udiv", "umod", "sdiv", "say", "text_addr", "text_len", "ward_addr", "fn_addr"
+let int_arity be weave 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1
 
 incant index_of takes lst, x
   let i be 0
@@ -523,6 +523,18 @@ incant intrinsic takes name, args, ln
       call die_at with ("no ward was spoken for vector " add by v), ln
     end
     call emit with "  mov eax, isr_" add by v
+    void
+  end
+  if name is "fn_addr"
+    ~ the address of an incantation (the choir starts a voice there)
+    if ((args at 0) at 0) not "name"
+      call die_at with "fn_addr needs the name of an incantation", ln
+    end
+    let fname be (args at 0) at 1
+    if (call find_fn with fname) is -1
+      call die_at with ("an incantation named \"" add by fname add by "\" has not been spoken yet"), ln
+    end
+    call emit with "  mov eax, g_" add by fname
     void
   end
   ~ the two-operand machine words: a in EAX, b in ECX

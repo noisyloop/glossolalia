@@ -1,0 +1,55 @@
+~ tongue: bare
+~ rt/heap.glo — the allocator (milestone 5). A bump pointer plus a free list.
+~ A block is a 16-byte header {size, next-free, 0, 0} then the payload, so
+~ every payload address is a multiple of 16. heap_alloc takes the first
+~ freed block that fits, else bumps. The runtime never frees (no GC), but
+~ programs and the choir may.
+rite
+  let heap_top be 0
+  let heap_end be 0
+  let heap_free be 0
+
+  incant heap_init takes base, limit
+    set heap_top to base
+    set heap_end to limit
+    set heap_free to 0
+  end
+
+  incant heap_alloc takes n
+    let rounded be (n add by 15) subtract by (call umod with (n add by 15), 16)
+    let total be rounded add by 16
+    let prev be 0
+    let cur be heap_free
+    until cur is 0
+      if (peek p32 cur) above (total subtract by 1)
+        let nxt be peek p32 (cur add by 4)
+        if prev is 0
+          set heap_free to nxt
+        else
+          inscribe p32 nxt at (prev add by 4)
+        end
+        echo cur add by 16
+      end
+      set prev to cur
+      set cur to peek p32 (cur add by 4)
+    end
+    if (heap_top add by total) above heap_end
+      speak "the machine stopped: the heap is full"
+      call t_exit with 1
+    end
+    let blk be heap_top
+    set heap_top to heap_top add by total
+    inscribe p32 total at blk
+    echo blk add by 16
+  end
+
+  incant heap_release takes p
+    let blk be p subtract by 16
+    inscribe p32 heap_free at (blk add by 4)
+    set heap_free to blk
+  end
+
+  incant heap_used
+    echo heap_top
+  end
+end

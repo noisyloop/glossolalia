@@ -1,0 +1,110 @@
+~ tongue: bare
+~ rt/glyph.glo — glyph and strand objects (milestone 5, SPEC-BARE.md §6.2).
+~ An object is {kind, length, data, buffer}: kind 1 glyph (bytes) or 2 strand
+~ (4-byte words); a buffer is {capacity, used} then the bytes. Appending to a
+~ view that ends exactly at its buffer's `used` mark extends the buffer in
+~ place and returns a NEW header, so older values are untouched.
+invoke "rt/heap"
+
+rite
+  incant tag_pulse takes x
+    echo (x scale by 2) add by 1
+  end
+
+  incant untag_pulse takes x
+    echo call sar with x, 1
+  end
+
+  incant obj_copy takes dst, src, n
+    let i be 0
+    until i is n
+      inscribe p8 (peek p8 (src add by i)) at (dst add by i)
+      rise i
+    end
+  end
+
+  incant obj_esize takes kind
+    if kind is 2
+      echo 4
+    end
+    echo 1
+  end
+
+  ~ an empty object of this kind whose buffer holds cap bytes
+  incant obj_new takes kind, cap
+    let buf be call heap_alloc with (cap add by 8)
+    inscribe p32 cap at buf
+    inscribe p32 0 at (buf add by 4)
+    let h be call heap_alloc with 16
+    inscribe p32 kind at h
+    inscribe p32 0 at (h add by 4)
+    inscribe p32 (buf add by 8) at (h add by 8)
+    inscribe p32 buf at (h add by 12)
+    echo h
+  end
+
+  ~ a glyph holding len bytes copied from addr
+  incant glyph_from takes addr, len
+    let h be call obj_new with 1, (len add by 16)
+    call obj_copy with (peek p32 (h add by 8)), addr, len
+    inscribe p32 len at (h add by 4)
+    inscribe p32 len at ((peek p32 (h add by 12)) add by 4)
+    echo h
+  end
+
+  incant obj_count takes h
+    echo peek p32 (h add by 4)
+  end
+
+  ~ element i: a byte of a glyph, a word of a strand (-1 when out of range)
+  incant obj_at takes h, i
+    if i below 0 or i above ((peek p32 (h add by 4)) subtract by 1)
+      echo 0 subtract by 1
+    end
+    let data be peek p32 (h add by 8)
+    if (peek p32 h) is 2
+      echo peek p32 (data add by (i scale by 4))
+    end
+    echo peek p8 (data add by i)
+  end
+
+  ~ a followed by b (same kind): in place when a ends at the buffer's mark
+  incant obj_append takes a, b
+    let kind be peek p32 a
+    let es be call obj_esize with kind
+    let alen be (peek p32 (a add by 4)) scale by es
+    let blen be (peek p32 (b add by 4)) scale by es
+    let adata be peek p32 (a add by 8)
+    let bdata be peek p32 (b add by 8)
+    let abuf be peek p32 (a add by 12)
+    if abuf above 0
+      let used be peek p32 (abuf add by 4)
+      let cap be peek p32 abuf
+      if (adata add by alen) is ((abuf add by 8) add by used)
+        if (used add by blen) below (cap add by 1)
+          call obj_copy with (adata add by alen), bdata, blen
+          inscribe p32 (used add by blen) at (abuf add by 4)
+          let h be call heap_alloc with 16
+          inscribe p32 kind at h
+          inscribe p32 ((peek p32 (a add by 4)) add by (peek p32 (b add by 4))) at (h add by 4)
+          inscribe p32 adata at (h add by 8)
+          inscribe p32 abuf at (h add by 12)
+          echo h
+        end
+      end
+    end
+    ~ no room: a fresh buffer twice the size, so later appends are cheap
+    let want be (alen add by blen) scale by 2
+    if want below 32
+      set want to 32
+    end
+    let n be call obj_new with kind, want
+    let ndata be peek p32 (n add by 8)
+    let nbuf be peek p32 (n add by 12)
+    call obj_copy with ndata, adata, alen
+    call obj_copy with (ndata add by alen), bdata, blen
+    inscribe p32 ((peek p32 (a add by 4)) add by (peek p32 (b add by 4))) at (n add by 4)
+    inscribe p32 (alen add by blen) at (nbuf add by 4)
+    echo n
+  end
+end
