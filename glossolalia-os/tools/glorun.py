@@ -23,7 +23,7 @@ here = os.path.dirname(os.path.abspath(__file__))
 def _find_interpreter():
     """Beside this repo (../glossolalia) or, when glossolalia-os lives inside
     the glossolalia repo, one level up."""
-    for rel in ("..", os.path.join("..", "..", "glossolalia")):
+    for rel in (os.path.join("..", ".."), os.path.join("..", "..", "glossolalia")):
         cand = os.path.join(here, rel)
         if os.path.isdir(os.path.join(cand, "glo")):
             return cand
