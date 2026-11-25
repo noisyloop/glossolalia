@@ -5,10 +5,10 @@
 #   make iso      build/glossolalia.iso
 #   make run      boot it in QEMU (with sound, no network)
 #
-# Where the reference interpreter lives (the Python one). It is used to build
+# Where the reference interpreter lives (the Python one: glo/ in this repo). It is used to build
 # glossc the first time; once glossc can compile itself (milestone 7) nothing
 # else needs it.
-GLOSSOLALIA ?= $(shell if [ -d ../glo ]; then echo ..; else echo ../glossolalia; fi)
+GLOSSOLALIA ?= .
 export GLOSSOLALIA
 
 PY      ?= python3
@@ -56,12 +56,12 @@ test-interpreter:
 
 # glossc running on the interpreter, parity against native binaries.
 test-compiler:
-	$(PY) -m pytest -q tests/test_compiler.py
+	$(PY) -m pytest -q ostests/test_compiler.py
 
 # Headless boots: -display none, COM1 on stdout, isa-debug-exit for the
 # verdict, and a timeout on every run.
 test-boot:
-	$(PY) -m pytest -q tests/test_boot.py tests/test_interrupts.py tests/test_sound.py
+	$(PY) -m pytest -q ostests/test_boot.py ostests/test_interrupts.py ostests/test_sound.py
 
 test: test-interpreter test-compiler test-boot
 
