@@ -391,6 +391,16 @@ commands:
 
 The same text appears on the screen (VGA text mode) and on COM1.
 
+### Download the ISO (v0.2.0)
+
+**[`releases/glossolalia-0.2.0.iso`](releases/glossolalia-0.2.0.iso)** (5 MB, i386, GRUB). Boot it offline:
+
+```
+qemu-system-i386 -cdrom releases/glossolalia-0.2.0.iso -nic none
+```
+
+sha256 `1f8142be1179eab3e434c29d73d6eeaa63c78075c0e084b3fb40a8874c5e1979`. Try `version` and `choir` at the prompt.
+
 ### Status
 
 | milestone | | |
