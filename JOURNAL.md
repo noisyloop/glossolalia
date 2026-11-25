@@ -1,6 +1,6 @@
 # JOURNAL — what each milestone taught about how an operating system works
 
-Written at the end of milestone 4. Milestones 5-7 are not built; the last
+Written at the end of milestone 4 (v0.2.0 adds a heap/glyph runtime and the choir as libraries; self-hosting still fails). The last
 section says what they would have taught and how the design is laid out for them.
 
 ## Milestone 0 — teaching the interpreter to talk to a machine

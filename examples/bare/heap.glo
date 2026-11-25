@@ -1,0 +1,29 @@
+~ tongue: bare
+~ milestone 5: the allocator and the glyph/strand runtime (runs on both)
+invoke "rt/bits"
+invoke "rt/glyph"
+rite
+  call heap_init with 0x08250000, 0x08400000
+  let a be call heap_alloc with 10
+  let b be call heap_alloc with 40
+  speak b subtract by a
+  call heap_release with a
+  speak (call heap_alloc with 8) is a
+  inscribe p8 97 at 0x08100000
+  inscribe p8 98 at 0x08100001
+  inscribe p8 99 at 0x08100002
+  inscribe p8 100 at 0x08100010
+  inscribe p8 101 at 0x08100011
+  let g be call glyph_from with 0x08100000, 3
+  let h be call glyph_from with 0x08100010, 2
+  let k be call obj_append with g, h
+  let m be call obj_append with k, h
+  speak call obj_count with k
+  speak call obj_count with m
+  speak call obj_count with g
+  speak call obj_at with m, 3
+  speak call obj_at with m, 9
+  let s be call obj_new with 2, 64
+  speak call tag_pulse with 20
+  speak call untag_pulse with (call tag_pulse with 20)
+end

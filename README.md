@@ -400,9 +400,9 @@ The same text appears on the screen (VGA text mode) and on COM1.
 | 2 | first boot: Multiboot stub, VGA text + COM1, `make iso`, headless boot tests | done |
 | 3 | GDT, IDT, PIC remap, `ward` handlers, PIT-driven `drift`, PS/2 keyboard (with timeouts), REPL | done |
 | 4 | sound: `burn` / `silence` through the PC speaker (PIT channel 2); tests measure the pitch from a recorded WAV | done |
-| 5 | heap allocator; glyphs and strands in compiled code | **not started** (design in SPEC-BARE.md §6.2) |
-| 6 | the choir: cooperative `voice` / `breathe` / `sync voices` | **not started** |
-| 7 | self-hosting: glossc compiles itself, byte-identical | **not started** |
+| 5 | heap allocator + glyph/strand runtime (`rt/heap.glo`, `rt/glyph.glo`, bare tongue, tested on both targets) | **partial**: runtime done; the full-tongue compiler back end that emits tagged values is not written |
+| 6 | the choir: `rt/choir.glo` + `switch_stacks` (`voice_spawn`, `voice_yield`; `fn_addr` word) | **done as a library** (no `voice`/`breathe` syntax yet); boots in QEMU |
+| 7 | self-hosting: glossc compiles itself, byte-identical | **fails**: `tools/selfhost.sh` stops at the first glyph (needs milestone 5's back end) |
 | stretch | glossc inside the OS, GRUB-module ramdisk | not attempted |
 
 What works today: a bootable, offline, GRUB-loaded kernel written entirely in

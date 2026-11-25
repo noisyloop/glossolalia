@@ -1,0 +1,31 @@
+~ tongue: bare
+~ kernel/test_choir.glo — milestone 6's self-test: three voices take turns.
+invoke "console"
+invoke "rt/choir"
+
+incant alto
+  speak "alto 1"
+  call voice_yield
+  speak "alto 2"
+  call voice_yield
+end
+
+incant bass
+  speak "bass 1"
+  call voice_yield
+  speak "bass 2"
+  call voice_yield
+end
+
+call console_init
+call heap_init with 0x00400000, 0x04000000
+call voice_spawn with (call fn_addr with alto)
+call voice_spawn with (call fn_addr with bass)
+speak "main 1"
+call voice_yield
+speak "main 2"
+call voice_yield
+speak "main 3"
+call voice_yield
+speak "choir ok"
+depart 16

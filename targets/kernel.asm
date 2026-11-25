@@ -60,6 +60,24 @@ g_sti:                        ; start taking interrupts
 ; lgdt reads a 6-byte "pseudo-descriptor" from memory: a 16-bit limit, then a
 ; 32-bit base. Arguments were pushed left to right, so after the call:
 ;   [esp] = return address   [esp+4] = limit   [esp+8] = base
+; switch_stacks(save_at, to): the choir's one assembly routine. Save the
+; callee-saved registers on this voice's stack, store esp at [save_at], load
+; esp from `to`, restore that voice's registers and return into it.
+g_switch_stacks:
+  mov eax, [esp+8]            ; save_at
+  mov ecx, [esp+4]            ; to
+  push ebp
+  push ebx
+  push esi
+  push edi
+  mov [eax], esp
+  mov esp, ecx
+  pop edi
+  pop esi
+  pop ebx
+  pop ebp
+  ret
+
 g_load_gdt:
   mov eax, [esp+8]            ; eax = base address of the table
   mov ecx, [esp+4]            ; ecx = limit (size in bytes minus one)

@@ -1,0 +1,48 @@
+~ tongue: bare
+~ rt/choir.glo — cooperative voices (milestone 6). A voice is a stack plus its
+~ saved registers; `voice_yield` swaps to the next voice (round robin) with the
+~ kernel's one assembly routine, switch_stacks. Voice 0 is the main program.
+invoke "rt/heap"
+
+rite
+  let choir_table be 0x003E0000
+  let voice_count be 1
+  let voice_cur be 0
+
+  ~ a voice that returns lands here and just keeps yielding
+  incant voice_end
+    until 0
+      call voice_yield
+    end
+  end
+
+  ~ start a voice at an incantation; returns its number
+  incant voice_spawn takes entry
+    let id be voice_count
+    let top be (call heap_alloc with 4096) add by 4096
+    let sp be top subtract by 24
+    inscribe p32 0 at sp
+    inscribe p32 0 at (sp add by 4)
+    inscribe p32 0 at (sp add by 8)
+    inscribe p32 0 at (sp add by 12)
+    inscribe p32 entry at (sp add by 16)
+    inscribe p32 (call fn_addr with voice_end) at (sp add by 20)
+    inscribe p32 sp at (choir_table add by (id scale by 4))
+    set voice_count to voice_count add by 1
+    echo id
+  end
+
+  incant voice_yield
+    let me be voice_cur
+    let nxt be me add by 1
+    if nxt is voice_count
+      set nxt to 0
+    end
+    if nxt is me
+      void
+    else
+      set voice_cur to nxt
+      call switch_stacks with (choir_table add by (me scale by 4)), (peek p32 (choir_table add by (nxt scale by 4)))
+    end
+  end
+end
